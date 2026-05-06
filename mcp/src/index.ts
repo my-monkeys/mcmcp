@@ -669,16 +669,31 @@ server.registerTool(
     try {
       const id = resolveSession(session_id);
       const session = await store.getSession(id);
+      if (region) {
+        const inBounds =
+          region.x2 < session.size_x &&
+          region.y2 < session.size_y &&
+          region.z2 < session.size_z &&
+          region.x1 <= region.x2 &&
+          region.y1 <= region.y2 &&
+          region.z1 <= region.z2;
+        if (!inBounds) {
+          return error(
+            `Region out of bounds for session ${id} (size ${session.size_x}×${session.size_y}×${session.size_z}).`,
+          );
+        }
+      }
       const existing = await store.getAll(id);
       if (existing.length > 0 && !force) {
         return error(
           `Zone has ${existing.length} existing blocks. Pass force: true to overwrite.`,
         );
       }
+      const resolvedSeed = seed ?? Date.now();
       const placements = generateBiome({
         biome: biome as BiomeName,
         size: { x: session.size_x, y: session.size_y, z: session.size_z },
-        seed,
+        seed: resolvedSeed,
         region,
       });
       const written = await store.setBlocks(
@@ -686,7 +701,7 @@ server.registerTool(
         placements.map((p) => ({ x: p.x, y: p.y, z: p.z, block: p.block })),
       );
       return text(
-        `Generated biome ${biome} (seed ${seed ?? '<random>'}). ` +
+        `Generated biome ${biome} (seed ${resolvedSeed}). ` +
           `Wrote ${written.written} blocks.`,
       );
     } catch (e) {
