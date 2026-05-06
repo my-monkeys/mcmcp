@@ -1,13 +1,64 @@
 'use client';
 
+import { useGSAP } from '@gsap/react';
+import { useRef } from 'react';
+import { gsap, SplitText, registerGsap } from '@/lib/landing/gsap';
+
 const VOXEL_GRID_SIZE = 8;
 
 export function HeroKinetic() {
+  const root = useRef<HTMLElement>(null);
+
+  useGSAP(() => {
+    registerGsap();
+    const root_ = root.current;
+    if (!root_) return;
+    const title = root_.querySelector<HTMLElement>('[data-hero-title]');
+    const cta = root_.querySelector<HTMLElement>('[data-hero-cta]');
+    const letters = root_.querySelector<HTMLElement>('[data-hero-letters]');
+    const voxels = root_.querySelectorAll<HTMLElement>('[data-voxel]');
+    if (!title || !cta || !letters) return;
+
+    const split = SplitText.create(title, { type: 'lines,words', linesClass: 'overflow-hidden' });
+
+    const intro = gsap.timeline();
+    intro
+      .set(title, { opacity: 1 })
+      .from(split.words, { y: '110%', stagger: 0.04, duration: 0.7, ease: 'power3.out' })
+      .to(cta, { opacity: 1, y: 0, duration: 0.5, ease: 'power2.out' }, '-=0.2');
+
+    const disintegrate = gsap.timeline({
+      scrollTrigger: {
+        trigger: root_,
+        start: 'top top',
+        end: '+=100%',
+        scrub: 0.6,
+        pin: true,
+      },
+    });
+    disintegrate
+      .to(letters, { opacity: 0, ease: 'none' })
+      .to(
+        voxels,
+        {
+          opacity: 1,
+          stagger: { each: 0.005, from: 'random' },
+          ease: 'none',
+        },
+        0,
+      );
+
+    return () => {
+      split.revert();
+    };
+  }, { scope: root });
+
   const voxels = Array.from({ length: VOXEL_GRID_SIZE * VOXEL_GRID_SIZE });
   return (
     <section
+      ref={root}
       data-section="hero"
-      className="relative min-h-[140vh] flex items-center justify-center px-6 overflow-hidden"
+      className="relative min-h-[200vh] flex items-center justify-center px-6 overflow-hidden"
     >
       <h1
         data-hero-title
