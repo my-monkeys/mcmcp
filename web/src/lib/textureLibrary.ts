@@ -97,6 +97,9 @@ export class TextureLibrary {
     referenced.add('grass_block_side_overlay'); // for the grass-style composite
 
     const loader = new THREE.TextureLoader();
+    let loaded = 0;
+    let failed = 0;
+    const failures: string[] = [];
     await Promise.all(
       Array.from(referenced).map(async (name) => {
         try {
@@ -106,11 +109,14 @@ export class TextureLibrary {
             this.alphaTextures.add(name);
           }
           this.textures.set(name, tex);
-        } catch {
-          // Missing texture — keep the library running, fallback materials will fill in.
+          loaded++;
+        } catch (e) {
+          failed++;
+          if (failures.length < 5) failures.push(name);
         }
       })
     );
+    console.log(`[TextureLibrary] preload done: ${loaded} loaded, ${failed} failed${failed > 0 ? ` (e.g. ${failures.join(', ')})` : ''}`);
 
     // Pre-bake the grass_block side composite (gray base + tinted overlay).
     const baseImg = this.textures.get('grass_block_side')?.image as HTMLImageElement | undefined;
@@ -130,6 +136,7 @@ export class TextureLibrary {
 
     const entry = this.manifest?.blocks[resolveBlockId(id)];
     if (!entry) {
+      console.warn(`[TextureLibrary] block "${id}" not in manifest, using hash fallback`);
       const fb = this.getFallback(id);
       const mats: THREE.Material[] = [fb, fb, fb, fb, fb, fb];
       this.materialsByBlock.set(id, mats);
@@ -155,6 +162,7 @@ export class TextureLibrary {
 
     const tex = this.textures.get(textureName);
     if (!tex) {
+      console.warn(`[TextureLibrary] texture not found: "${textureName}", using magenta fallback`);
       const m = new THREE.MeshLambertMaterial({ color: 0xff00ff });
       this.materialByKey.set(key, m);
       return m;
