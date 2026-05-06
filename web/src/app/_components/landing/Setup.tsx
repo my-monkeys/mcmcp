@@ -60,7 +60,6 @@ export function Setup() {
 
     mm.add('(prefers-reduced-motion: no-preference)', () => {
       // Desktop + mobile: typewriter + form reveal.
-      const full = code.textContent ?? '';
       code.textContent = '';
 
       const tl = gsap.timeline({
@@ -71,7 +70,7 @@ export function Setup() {
         ease: 'none',
         onUpdate() {
           const p = this.progress();
-          code.textContent = full.slice(0, Math.floor(p * full.length));
+          code.textContent = CONFIG_SNIPPET.slice(0, Math.floor(p * CONFIG_SNIPPET.length));
         },
       }).from(form, { opacity: 0, y: 30, duration: 0.6, ease: 'power3.out' }, '-=0.2');
     });
