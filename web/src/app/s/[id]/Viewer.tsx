@@ -29,6 +29,26 @@ export default function Viewer({ session }: Props) {
   const [pickToast, setPickToast] = useState<string | null>(null);
   const [version, setVersion] = useState<McVersion>(() => asMcVersion(session.mc_version));
   const [exporting, setExporting] = useState(false);
+  const [diagLogs, setDiagLogs] = useState<string[]>([]);
+
+  useEffect(() => {
+    // Capture console logs for diagnostic display
+    const origLog = console.log;
+    const origWarn = console.warn;
+    const origError = console.error;
+    const append = (level: string, args: unknown[]) => {
+      setDiagLogs(prev => {
+        const msg = `[${level}] ${args.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ')}`.slice(0, 150);
+        const next = [...prev, msg];
+        if (next.length > 20) next.shift();
+        return next;
+      });
+    };
+    console.log = (...args: unknown[]) => { append('LOG', args); origLog(...args); };
+    console.warn = (...args: unknown[]) => { append('WARN', args); origWarn(...args); };
+    console.error = (...args: unknown[]) => { append('ERR', args); origError(...args); };
+    return () => { console.log = origLog; console.warn = origWarn; console.error = origError; };
+  }, []);
 
   useEffect(() => {
     if (!canvasRef.current || !containerRef.current) return;
@@ -156,6 +176,16 @@ export default function Viewer({ session }: Props) {
       <div ref={containerRef} className="absolute inset-0">
         <canvas ref={canvasRef} className="block w-full h-full" />
       </div>
+
+      {diagLogs.length > 0 ? (
+        <div className="absolute bottom-4 left-4 bg-black/80 border border-zinc-700 rounded-lg p-2 text-[10px] font-mono text-zinc-300 max-w-lg max-h-48 overflow-y-auto pointer-events-none opacity-70">
+          {diagLogs.map((l, i) => (
+            <div key={i} className={l.startsWith('[ERR]') ? 'text-red-400' : l.startsWith('[WARN]') ? 'text-amber-400' : 'text-zinc-400'}>
+              {l}
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       {pickToast ? (
         <div className="absolute bottom-20 left-1/2 -translate-x-1/2 bg-zinc-900/90 border border-zinc-700 rounded-md px-3 py-1.5 text-xs pointer-events-none animate-fade-in">
