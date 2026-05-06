@@ -7,6 +7,8 @@ import { createScene, type SceneHandles } from '@/lib/scene';
 import { copyText } from '@/lib/clipboard';
 import MaterialsPanel, { type Material } from './MaterialsPanel';
 import SelectionPanel, { type Selection } from './SelectionPanel';
+import { BiomePanel } from './BiomePanel';
+import { generateBiome, type BiomeName } from '@/lib/biome';
 
 type Props = { session: Session };
 
@@ -31,6 +33,8 @@ export default function Viewer({ session }: Props) {
   const [version, setVersion] = useState<McVersion>(() => asMcVersion(session.mc_version));
   const [exporting, setExporting] = useState(false);
   const [bg2State, setBg2State] = useState<'idle' | 'copying' | 'copied' | 'error'>('idle');
+  const [biomeBusy, setBiomeBusy] = useState(false);
+  const [biomeStatus, setBiomeStatus] = useState<string | null>(null);
   const [diagLogs, setDiagLogs] = useState<string[]>([]);
   const [selectionEnabled, setSelectionEnabled] = useState(false);
   const [selection, setSelection] = useState<Selection>({
@@ -202,6 +206,42 @@ export default function Viewer({ session }: Props) {
     }
   };
 
+  const handleGenerateBiome = async (biome: BiomeName, seed: number) => {
+    setBiomeBusy(true);
+    setBiomeStatus('Generating…');
+    try {
+      const region = selectionEnabled ? selection : undefined;
+      const placements = await generateBiome({
+        biome,
+        size: { x: session.size_x, y: session.size_y, z: session.size_z },
+        seed,
+        region,
+      });
+      setBiomeStatus(`Writing ${placements.length} blocks…`);
+
+      const BATCH = 1000;
+      for (let i = 0; i < placements.length; i += BATCH) {
+        const slice = placements.slice(i, i + BATCH);
+        const rows = slice.map((p) => ({
+          session_id: session.id,
+          x: p.x, y: p.y, z: p.z,
+          block_type: p.block,
+        }));
+        const { error: e } = await supabase
+          .from('mcmcp_blocks')
+          .upsert(rows, { onConflict: 'session_id,x,y,z' });
+        if (e) throw e;
+        setBiomeStatus(`Writing ${Math.min(i + BATCH, placements.length)} / ${placements.length}…`);
+      }
+      setBiomeStatus(`Generated ${biome} (${placements.length} blocks)`);
+      setTimeout(() => setBiomeStatus(null), 3000);
+    } catch (e) {
+      setBiomeStatus(`Error: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setBiomeBusy(false);
+    }
+  };
+
   return (
     <div className="relative h-dvh w-dvw bg-zinc-950 text-zinc-100 overflow-hidden">
       <div ref={containerRef} className="absolute inset-0">
@@ -313,6 +353,13 @@ export default function Viewer({ session }: Props) {
             ? 'No blocks'
             : 'Copy BG2 template'}
         </button>
+
+        <BiomePanel
+          hasExistingBlocks={count > 0}
+          busy={biomeBusy}
+          status={biomeStatus}
+          onGenerate={handleGenerateBiome}
+        />
 
         <div className="bg-zinc-900/80 backdrop-blur border border-zinc-800 rounded-lg px-4 py-3 text-xs space-y-3 min-w-56">
           <div className="flex items-center justify-between">
