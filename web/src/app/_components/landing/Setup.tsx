@@ -1,7 +1,9 @@
 'use client';
 
+import { useGSAP } from '@gsap/react';
 import { useRouter } from 'next/navigation';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
+import { gsap, registerGsap } from '@/lib/landing/gsap';
 import { generateSessionId, supabase } from '@/lib/supabase';
 
 type SizePreset = { label: string; x: number; y: number; z: number };
@@ -44,6 +46,31 @@ export function Setup() {
   const [custom, setCustom] = useState({ x: 24, y: 24, z: 24 });
   const [copied, setCopied] = useState(false);
 
+  const root = useRef<HTMLElement>(null);
+
+  useGSAP(() => {
+    registerGsap();
+    const root_ = root.current;
+    if (!root_) return;
+    const code = root_.querySelector<HTMLElement>('[data-setup-snippet]');
+    const form = root_.querySelector<HTMLElement>('[data-setup-form]');
+    if (!code || !form) return;
+    const full = code.textContent ?? '';
+    code.textContent = '';
+
+    const tl = gsap.timeline({
+      scrollTrigger: { trigger: root_, start: 'top 70%', once: true },
+    });
+    tl.to(code, {
+      duration: 1.4,
+      ease: 'none',
+      onUpdate() {
+        const p = this.progress();
+        code.textContent = full.slice(0, Math.floor(p * full.length));
+      },
+    }).from(form, { opacity: 0, y: 30, duration: 0.6, ease: 'power3.out' }, '-=0.2');
+  }, { scope: root });
+
   const size = selected >= 0 ? PRESETS[selected]! : custom;
   const volume = size.x * size.y * size.z;
 
@@ -73,7 +100,7 @@ export function Setup() {
   }, [size, router]);
 
   return (
-    <section id="create" data-section="setup" className="border-t border-white/5 py-32 px-6">
+    <section ref={root} id="create" data-section="setup" className="border-t border-white/5 py-32 px-6">
       <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-12">
         <div className="flex flex-col gap-6">
           <span className="text-xs uppercase tracking-[0.25em] text-[#7ec07e]">Quick setup</span>
