@@ -14,6 +14,8 @@ export type SceneHandles = {
   setZone: (sx: number, sy: number, sz: number) => void;
   /** Show only blocks whose y is in [minY, maxY] inclusive. */
   setYRange: (minY: number, maxY: number) => void;
+  /** Show or hide a wireframe overlay for the AI-edit selection region. */
+  setSelection: (sel: { x1: number; y1: number; z1: number; x2: number; y2: number; z2: number } | null) => void;
   destroy: () => void;
 };
 
@@ -83,6 +85,47 @@ export async function createScene(
     world.setYRange(minY, maxY);
   };
 
+  const selectionOutline = new THREE.LineSegments(
+    new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)),
+    new THREE.LineBasicMaterial({ color: 0xffb000, transparent: true, opacity: 0.9 })
+  );
+  const selectionFill = new THREE.Mesh(
+    new THREE.BoxGeometry(1, 1, 1),
+    new THREE.MeshBasicMaterial({ color: 0xffb000, transparent: true, opacity: 0.07, depthWrite: false })
+  );
+  selectionOutline.visible = false;
+  selectionFill.visible = false;
+  scene.add(selectionOutline);
+  scene.add(selectionFill);
+
+  const setSelection: SceneHandles['setSelection'] = (sel) => {
+    if (!sel) {
+      selectionOutline.visible = false;
+      selectionFill.visible = false;
+      return;
+    }
+    const x1 = Math.min(sel.x1, sel.x2);
+    const x2 = Math.max(sel.x1, sel.x2);
+    const y1 = Math.min(sel.y1, sel.y2);
+    const y2 = Math.max(sel.y1, sel.y2);
+    const z1 = Math.min(sel.z1, sel.z2);
+    const z2 = Math.max(sel.z1, sel.z2);
+    const sx = x2 - x1 + 1;
+    const sy = y2 - y1 + 1;
+    const sz = z2 - z1 + 1;
+    const cx = x1 + sx / 2;
+    const cy = y1 + sy / 2;
+    const cz = z1 + sz / 2;
+    selectionOutline.geometry.dispose();
+    selectionOutline.geometry = new THREE.EdgesGeometry(new THREE.BoxGeometry(sx, sy, sz));
+    selectionOutline.position.set(cx, cy, cz);
+    selectionFill.geometry.dispose();
+    selectionFill.geometry = new THREE.BoxGeometry(sx, sy, sz);
+    selectionFill.position.set(cx, cy, cz);
+    selectionOutline.visible = true;
+    selectionFill.visible = true;
+  };
+
   const fitToBounds = () => {
     const bounds = world.computeBounds();
     if (!bounds) return;
@@ -122,5 +165,5 @@ export async function createScene(
     renderer.dispose();
   };
 
-  return { renderer, scene, camera, controls, world, textures, fitToBounds, setZone, setYRange, destroy };
+  return { renderer, scene, camera, controls, world, textures, fitToBounds, setZone, setYRange, setSelection, destroy };
 }

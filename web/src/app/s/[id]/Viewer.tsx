@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { createScene, type SceneHandles } from '@/lib/scene';
 import { copyText } from '@/lib/clipboard';
 import MaterialsPanel, { type Material } from './MaterialsPanel';
+import SelectionPanel, { type Selection } from './SelectionPanel';
 
 type Props = { session: Session };
 
@@ -30,6 +31,15 @@ export default function Viewer({ session }: Props) {
   const [version, setVersion] = useState<McVersion>(() => asMcVersion(session.mc_version));
   const [exporting, setExporting] = useState(false);
   const [diagLogs, setDiagLogs] = useState<string[]>([]);
+  const [selectionEnabled, setSelectionEnabled] = useState(false);
+  const [selection, setSelection] = useState<Selection>({
+    x1: 0,
+    y1: 0,
+    z1: 0,
+    x2: session.size_x - 1,
+    y2: session.size_y - 1,
+    z2: session.size_z - 1,
+  });
 
   useEffect(() => {
     // Capture console logs for diagnostic display
@@ -145,6 +155,10 @@ export default function Viewer({ session }: Props) {
     sceneRef.current?.setYRange(bottomY, topY);
   }, [bottomY, topY]);
 
+  useEffect(() => {
+    sceneRef.current?.setSelection(selectionEnabled ? selection : null);
+  }, [selectionEnabled, selection]);
+
   const onChangeVersion = async (v: McVersion) => {
     setVersion(v);
     const { error } = await supabase
@@ -194,6 +208,15 @@ export default function Viewer({ session }: Props) {
       ) : null}
 
       <MaterialsPanel materials={materials} iconUrlFor={iconUrlFor} onPick={onPickBlock} />
+
+      <SelectionPanel
+        sessionId={session.id}
+        size={{ x: session.size_x, y: session.size_y, z: session.size_z }}
+        enabled={selectionEnabled}
+        selection={selection}
+        onChangeEnabled={setSelectionEnabled}
+        onChangeSelection={setSelection}
+      />
 
       <div className="absolute top-4 left-4 flex flex-col gap-3 pointer-events-none">
         <div className="pointer-events-auto bg-zinc-900/80 backdrop-blur border border-zinc-800 rounded-lg px-4 py-3 flex flex-col gap-2 min-w-64">
