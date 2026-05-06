@@ -19,38 +19,64 @@ export function HeroKinetic() {
     const voxels = root_.querySelectorAll<HTMLElement>('[data-voxel]');
     if (!title || !cta || !letters) return;
 
-    const split = SplitText.create(title, { type: 'lines,words', linesClass: 'overflow-hidden' });
+    const mm = gsap.matchMedia();
 
-    const intro = gsap.timeline();
-    intro
-      .set(title, { opacity: 1 })
-      .from(split.words, { y: '110%', stagger: 0.04, duration: 0.7, ease: 'power3.out' })
-      .to(cta, { opacity: 1, y: 0, duration: 0.5, ease: 'power2.out' }, '-=0.2');
+    mm.add('(min-width: 640px) and (prefers-reduced-motion: no-preference)', () => {
+      const split = SplitText.create(title, { type: 'lines,words', linesClass: 'overflow-hidden' });
 
-    const disintegrate = gsap.timeline({
-      scrollTrigger: {
-        trigger: root_,
-        start: 'top top',
-        end: '+=100%',
-        scrub: 0.6,
-        pin: true,
-      },
-    });
-    disintegrate
-      .to(letters, { opacity: 0, ease: 'none' })
-      .to(
-        voxels,
-        {
-          opacity: 1,
-          stagger: { each: 0.005, from: 'random' },
-          ease: 'none',
+      const intro = gsap.timeline();
+      intro
+        .set(title, { opacity: 1 })
+        .from(split.words, { y: '110%', stagger: 0.04, duration: 0.7, ease: 'power3.out' })
+        .to(cta, { opacity: 1, y: 0, duration: 0.5, ease: 'power2.out' }, '-=0.2');
+
+      const disintegrate = gsap.timeline({
+        scrollTrigger: {
+          trigger: root_,
+          start: 'top top',
+          end: '+=100%',
+          scrub: 0.6,
+          pin: true,
         },
-        0,
-      );
+      });
+      disintegrate
+        .to(letters, { opacity: 0, ease: 'none' })
+        .to(
+          voxels,
+          {
+            opacity: 1,
+            stagger: { each: 0.005, from: 'random' },
+            ease: 'none',
+          },
+          0,
+        );
 
-    return () => {
-      split.revert();
-    };
+      return () => {
+        split.revert();
+      };
+    });
+
+    mm.add('(max-width: 639px) and (prefers-reduced-motion: no-preference)', () => {
+      // Mobile: words reveal intro only — no pin, no scrub, voxels stay hidden.
+      const split = SplitText.create(title, { type: 'lines,words', linesClass: 'overflow-hidden' });
+
+      const intro = gsap.timeline();
+      intro
+        .set(title, { opacity: 1 })
+        .from(split.words, { y: '110%', stagger: 0.04, duration: 0.7, ease: 'power3.out' })
+        .to(cta, { opacity: 1, y: 0, duration: 0.5, ease: 'power2.out' }, '-=0.2');
+
+      return () => {
+        split.revert();
+      };
+    });
+
+    mm.add('(prefers-reduced-motion: reduce)', () => {
+      // Snap to final state — no animation.
+      gsap.set(title, { opacity: 1 });
+      gsap.set(cta, { opacity: 1, y: 0 });
+      gsap.set(voxels, { opacity: 0 });
+    });
   }, { scope: root });
 
   const voxels = Array.from({ length: VOXEL_GRID_SIZE * VOXEL_GRID_SIZE });
@@ -58,7 +84,7 @@ export function HeroKinetic() {
     <section
       ref={root}
       data-section="hero"
-      className="relative min-h-[200vh] flex items-center justify-center px-6 overflow-hidden"
+      className="relative min-h-dvh md:min-h-[200vh] flex items-center justify-center px-6 overflow-hidden"
     >
       <h1
         data-hero-title

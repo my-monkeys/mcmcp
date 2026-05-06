@@ -55,20 +55,31 @@ export function Setup() {
     const code = root_.querySelector<HTMLElement>('[data-setup-snippet]');
     const form = root_.querySelector<HTMLElement>('[data-setup-form]');
     if (!code || !form) return;
-    const full = code.textContent ?? '';
-    code.textContent = '';
 
-    const tl = gsap.timeline({
-      scrollTrigger: { trigger: root_, start: 'top 70%', once: true },
+    const mm = gsap.matchMedia();
+
+    mm.add('(prefers-reduced-motion: no-preference)', () => {
+      // Desktop + mobile: typewriter + form reveal.
+      const full = code.textContent ?? '';
+      code.textContent = '';
+
+      const tl = gsap.timeline({
+        scrollTrigger: { trigger: root_, start: 'top 70%', once: true },
+      });
+      tl.to(code, {
+        duration: 1.4,
+        ease: 'none',
+        onUpdate() {
+          const p = this.progress();
+          code.textContent = full.slice(0, Math.floor(p * full.length));
+        },
+      }).from(form, { opacity: 0, y: 30, duration: 0.6, ease: 'power3.out' }, '-=0.2');
     });
-    tl.to(code, {
-      duration: 1.4,
-      ease: 'none',
-      onUpdate() {
-        const p = this.progress();
-        code.textContent = full.slice(0, Math.floor(p * full.length));
-      },
-    }).from(form, { opacity: 0, y: 30, duration: 0.6, ease: 'power3.out' }, '-=0.2');
+
+    mm.add('(prefers-reduced-motion: reduce)', () => {
+      // Keep the snippet at its full text content — don't clear or animate it.
+      // Form is already visible as static HTML.
+    });
   }, { scope: root });
 
   const size = selected >= 0 ? PRESETS[selected]! : custom;

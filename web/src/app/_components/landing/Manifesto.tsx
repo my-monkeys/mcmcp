@@ -13,15 +13,25 @@ export function Manifesto() {
     if (!root_) return;
     const text = root_.querySelector<HTMLElement>('[data-manifesto-text]');
     if (!text) return;
-    const split = SplitText.create(text, { type: 'lines', linesClass: 'overflow-hidden' });
-    gsap.from(split.lines, {
-      y: '110%',
-      stagger: 0.12,
-      duration: 0.9,
-      ease: 'power3.out',
-      scrollTrigger: { trigger: root_, start: 'top 70%', once: true },
+
+    const mm = gsap.matchMedia();
+
+    mm.add('(prefers-reduced-motion: no-preference)', () => {
+      // Same reveal on desktop and mobile — no pin involved.
+      const split = SplitText.create(text, { type: 'lines', linesClass: 'overflow-hidden' });
+      gsap.from(split.lines, {
+        y: '110%',
+        stagger: 0.12,
+        duration: 0.9,
+        ease: 'power3.out',
+        scrollTrigger: { trigger: root_, start: 'top 70%', once: true },
+      });
+      return () => split.revert();
     });
-    return () => split.revert();
+
+    mm.add('(prefers-reduced-motion: reduce)', () => {
+      // Title is already visible as static HTML — nothing to do.
+    });
   }, { scope: root });
 
   return (

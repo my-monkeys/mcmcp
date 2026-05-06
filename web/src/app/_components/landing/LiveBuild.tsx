@@ -49,6 +49,36 @@ export function LiveBuild() {
         return;
       }
       sceneRef.current = mini;
+
+      // After the scene is ready, apply the correct behaviour for the current
+      // media query. We check here (not inside useGSAP) because the scene
+      // mounts asynchronously — the GSAP hook may have already run by the time
+      // the scene exists.
+      if (typeof window === 'undefined') return;
+
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        // Snap to final state immediately.
+        setTyped(PROMPT);
+        mini.setProgress(1);
+      } else if (window.matchMedia('(max-width: 639px)').matches) {
+        // Mobile one-shot autoplay over 4 s (starts when scene is ready).
+        gsap.to({}, {
+          duration: 4,
+          ease: 'none',
+          onUpdate() {
+            const p = this.progress();
+            const cut = Math.floor(p * PROMPT.length);
+            setTyped(PROMPT.slice(0, cut));
+            mini.setProgress(p);
+          },
+          onComplete() {
+            setTyped(PROMPT);
+            mini.setProgress(1);
+          },
+        });
+      }
+      // Desktop scroll-driven behaviour is handled entirely by the useGSAP hook
+      // below via ScrollTrigger; it uses sceneRef.current directly.
     })();
     return () => {
       cancelled = true;
@@ -57,32 +87,49 @@ export function LiveBuild() {
     };
   }, [shouldMount]);
 
-  // Scroll-driven typewriter + scene progress
+  // Scroll-driven typewriter + scene progress (desktop only)
   useGSAP(() => {
     registerGsap();
     const node = root.current;
     if (!node) return;
-    const trigger = ScrollTrigger.create({
-      trigger: node,
-      start: 'top top',
-      end: '+=200%',
-      scrub: 0.5,
-      pin: '[data-live-pin]',
-      onUpdate: (self) => {
-        // typewriter band: 0.2..0.5 -> 0..1
-        const t = Math.max(0, Math.min(1, (self.progress - 0.2) / 0.3));
-        const cut = Math.floor(t * PROMPT.length);
-        setTyped(PROMPT.slice(0, cut));
-        // scene band: 0.5..0.95 -> 0..1
-        const s = Math.max(0, Math.min(1, (self.progress - 0.5) / 0.45));
-        sceneRef.current?.setProgress(s);
-      },
+
+    const mm = gsap.matchMedia();
+
+    mm.add('(min-width: 640px) and (prefers-reduced-motion: no-preference)', () => {
+      // Desktop: pin + scrub pilots typewriter and scene.
+      const trigger = ScrollTrigger.create({
+        trigger: node,
+        start: 'top top',
+        end: '+=200%',
+        scrub: 0.5,
+        pin: '[data-live-pin]',
+        onUpdate: (self) => {
+          // typewriter band: 0.2..0.5 -> 0..1
+          const t = Math.max(0, Math.min(1, (self.progress - 0.2) / 0.3));
+          const cut = Math.floor(t * PROMPT.length);
+          setTyped(PROMPT.slice(0, cut));
+          // scene band: 0.5..0.95 -> 0..1
+          const s = Math.max(0, Math.min(1, (self.progress - 0.5) / 0.45));
+          sceneRef.current?.setProgress(s);
+        },
+      });
+      return () => trigger.kill();
     });
-    return () => trigger.kill();
+
+    // Mobile and reduced-motion branches are driven from the scene-creation
+    // useEffect above (after the async scene is ready). No GSAP ScrollTrigger
+    // is registered for those branches.
+    mm.add('(max-width: 639px) and (prefers-reduced-motion: no-preference)', () => {
+      // Intentionally empty — autoplay kicks off in the scene-creation effect.
+    });
+
+    mm.add('(prefers-reduced-motion: reduce)', () => {
+      // Intentionally empty — snap is applied in the scene-creation effect.
+    });
   }, { scope: root });
 
   return (
-    <section ref={root} data-section="live-build" className="relative min-h-[300vh] border-t border-white/5">
+    <section ref={root} data-section="live-build" className="relative min-h-dvh md:min-h-[300vh] border-t border-white/5">
       <div data-live-pin className="sticky top-0 h-screen flex items-center justify-center px-6">
         <div className="grid md:grid-cols-2 gap-8 max-w-6xl w-full">
           <div className="bg-[#0e0e10] border border-white/10 rounded-xl p-6 flex flex-col gap-3 min-h-[400px]">

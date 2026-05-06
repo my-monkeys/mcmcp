@@ -21,26 +21,36 @@ export function ToolkitMarquee() {
     const track = root_.querySelector<HTMLElement>('[data-marquee-track]');
     if (!track) return;
 
-    const halfWidth = track.scrollWidth / 2;
-    const wrap = gsap.utils.wrap(-halfWidth, 0);
-    const tween = gsap.to(track, {
-      x: -halfWidth,
-      duration: 50,
-      ease: 'none',
-      repeat: -1,
-      modifiers: { x: (x: string) => `${wrap(parseFloat(x))}px` },
+    const mm = gsap.matchMedia();
+
+    mm.add('(prefers-reduced-motion: no-preference)', () => {
+      // Desktop + mobile: infinite marquee loop.
+      const halfWidth = track.scrollWidth / 2;
+      const wrap = gsap.utils.wrap(-halfWidth, 0);
+      const tween = gsap.to(track, {
+        x: -halfWidth,
+        duration: 50,
+        ease: 'none',
+        repeat: -1,
+        modifiers: { x: (x: string) => `${wrap(parseFloat(x))}px` },
+      });
+
+      const slow = () => tween.timeScale(0.25);
+      const speed = () => tween.timeScale(1);
+      track.addEventListener('mouseenter', slow);
+      track.addEventListener('mouseleave', speed);
+
+      return () => {
+        track.removeEventListener('mouseenter', slow);
+        track.removeEventListener('mouseleave', speed);
+        tween.kill();
+      };
     });
 
-    const slow = () => tween.timeScale(0.25);
-    const speed = () => tween.timeScale(1);
-    track.addEventListener('mouseenter', slow);
-    track.addEventListener('mouseleave', speed);
-
-    return () => {
-      track.removeEventListener('mouseenter', slow);
-      track.removeEventListener('mouseleave', speed);
-      tween.kill();
-    };
+    mm.add('(prefers-reduced-motion: reduce)', () => {
+      // Track sits at x=0; content is visible without looping.
+      gsap.set(track, { x: 0 });
+    });
   }, { scope: root });
 
   return (

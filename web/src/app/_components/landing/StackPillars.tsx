@@ -30,16 +30,26 @@ export function StackPillars() {
     const root_ = root.current;
     if (!root_) return;
     const pillars = root_.querySelectorAll<HTMLElement>('[data-pillar]');
-    pillars.forEach((p) => {
-      const targets = p.querySelectorAll<HTMLElement>('h3, p, [data-pillar-accent]');
-      gsap.from(targets, {
-        y: 40,
-        opacity: 0,
-        stagger: 0.08,
-        duration: 0.8,
-        ease: 'power3.out',
-        scrollTrigger: { trigger: p, start: 'top 60%', once: true },
+
+    const mm = gsap.matchMedia();
+
+    mm.add('(prefers-reduced-motion: no-preference)', () => {
+      // Desktop + mobile: per-pillar reveal (CSS sticky handles stacking on both).
+      pillars.forEach((p) => {
+        const targets = p.querySelectorAll<HTMLElement>('h3, p, [data-pillar-accent]');
+        gsap.from(targets, {
+          y: 40,
+          opacity: 0,
+          stagger: 0.08,
+          duration: 0.8,
+          ease: 'power3.out',
+          scrollTrigger: { trigger: p, start: 'top 60%', once: true },
+        });
       });
+    });
+
+    mm.add('(prefers-reduced-motion: reduce)', () => {
+      // Pillars are already visible as plain content — skip the gsap.from.
     });
   }, { scope: root });
 
