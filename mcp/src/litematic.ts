@@ -4,12 +4,16 @@ import type { BlockRow, Session } from './store.js';
 
 /**
  * Litematica .litematic encoder. Produces a gzipped NBT buffer compatible with
- * the Litematica mod's import (Schematic version 6, non-straddling block-state
- * packing as introduced in MC 1.16+).
+ * the Litematica mod's import (Schematic version 6, straddling block-state
+ * packing — entries can flow across 64-bit long boundaries).
+ *
+ * NOTE: Litematica uses its own `LitematicaBitArray`, NOT Minecraft's post-1.16
+ * non-straddling Anvil format. Each value occupies `bitsPerEntry` bits and may
+ * span the boundary between two adjacent longs.
  *
  * References:
  *   - https://github.com/maruohon/litematica/blob/master/src/main/java/fi/dy/masa/litematica/schematic/LitematicaSchematic.java
- *   - https://github.com/Lunatrius/Schematica (legacy format kept for reference)
+ *   - https://github.com/maruohon/litematica/blob/master/src/main/java/fi/dy/masa/litematica/util/LitematicaBitArray.java
  *
  * Coordinate convention: same as Minecraft. y is up, +x east, +z south.
  * BlockStates index order: i = (y * size_z + z) * size_x + x.
@@ -67,20 +71,34 @@ function bitsPerEntryFor(paletteSize: number): number {
 }
 
 /**
- * Pack indices into 64-bit longs using the non-straddling layout (entries
- * never cross long boundaries). Returns one [hi32, lo32] tuple per long, ready
- * to feed into prismarine-nbt's LongArray.
+ * Pack indices into 64-bit longs using Litematica's straddling layout — each
+ * entry occupies `bitsPerEntry` consecutive bits, and entries may cross long
+ * boundaries. Returns one [hi32, lo32] tuple per long, ready to feed into
+ * prismarine-nbt's LongArray.
+ *
+ * Mirrors `fi.dy.masa.litematica.util.LitematicaBitArray.set(int, int)`.
  */
 function packBlockStates(indices: number[], bitsPerEntry: number): [number, number][] {
-  const entriesPerLong = Math.floor(64 / bitsPerEntry);
-  const numLongs = Math.ceil(indices.length / entriesPerLong);
+  const totalBits = indices.length * bitsPerEntry;
+  const numLongs = Math.ceil(totalBits / 64);
   const longs = new Array<bigint>(numLongs).fill(0n);
   const bpe = BigInt(bitsPerEntry);
+  const mask = (1n << bpe) - 1n;
+
   for (let i = 0; i < indices.length; i++) {
-    const longIdx = Math.floor(i / entriesPerLong);
-    const bitOffset = BigInt(i % entriesPerLong) * bpe;
-    longs[longIdx]! |= BigInt(indices[i]!) << bitOffset;
+    const value = BigInt(indices[i]!) & mask;
+    const startBit = i * bitsPerEntry;
+    const longIdx = startBit >>> 6;          // /64
+    const bitOffset = startBit & 63;          // %64
+
+    longs[longIdx]! |= value << BigInt(bitOffset);
+
+    const bitsInFirst = 64 - bitOffset;
+    if (bitsInFirst < bitsPerEntry) {
+      longs[longIdx + 1]! |= value >> BigInt(bitsInFirst);
+    }
   }
+
   return longs.map((b) => {
     // Two's-complement wrap to int32 for hi/lo halves (prismarine-nbt expects signed).
     const hi = Number((b >> 32n) & 0xffffffffn) | 0;
