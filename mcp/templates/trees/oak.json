@@ -1,0 +1,43 @@
+{
+  "width": 5,
+  "height": 7,
+  "depth": 5,
+  "anchorX": 2,
+  "anchorZ": 2,
+  "blocks": [
+    { "x": 2, "y": 0, "z": 2, "block": "oak_log" },
+    { "x": 2, "y": 1, "z": 2, "block": "oak_log" },
+    { "x": 2, "y": 2, "z": 2, "block": "oak_log" },
+    { "x": 2, "y": 3, "z": 2, "block": "oak_log" },
+    { "x": 2, "y": 4, "z": 2, "block": "oak_log" },
+
+    { "x": 1, "y": 4, "z": 1, "block": "oak_leaves" },
+    { "x": 1, "y": 4, "z": 2, "block": "oak_leaves" },
+    { "x": 1, "y": 4, "z": 3, "block": "oak_leaves" },
+    { "x": 2, "y": 4, "z": 1, "block": "oak_leaves" },
+    { "x": 2, "y": 4, "z": 3, "block": "oak_leaves" },
+    { "x": 3, "y": 4, "z": 1, "block": "oak_leaves" },
+    { "x": 3, "y": 4, "z": 2, "block": "oak_leaves" },
+    { "x": 3, "y": 4, "z": 3, "block": "oak_leaves" },
+
+    { "x": 0, "y": 5, "z": 2, "block": "oak_leaves" },
+    { "x": 1, "y": 5, "z": 1, "block": "oak_leaves" },
+    { "x": 1, "y": 5, "z": 2, "block": "oak_leaves" },
+    { "x": 1, "y": 5, "z": 3, "block": "oak_leaves" },
+    { "x": 2, "y": 5, "z": 0, "block": "oak_leaves" },
+    { "x": 2, "y": 5, "z": 1, "block": "oak_leaves" },
+    { "x": 2, "y": 5, "z": 2, "block": "oak_leaves" },
+    { "x": 2, "y": 5, "z": 3, "block": "oak_leaves" },
+    { "x": 2, "y": 5, "z": 4, "block": "oak_leaves" },
+    { "x": 3, "y": 5, "z": 1, "block": "oak_leaves" },
+    { "x": 3, "y": 5, "z": 2, "block": "oak_leaves" },
+    { "x": 3, "y": 5, "z": 3, "block": "oak_leaves" },
+    { "x": 4, "y": 5, "z": 2, "block": "oak_leaves" },
+
+    { "x": 1, "y": 6, "z": 2, "block": "oak_leaves" },
+    { "x": 2, "y": 6, "z": 1, "block": "oak_leaves" },
+    { "x": 2, "y": 6, "z": 2, "block": "oak_leaves" },
+    { "x": 2, "y": 6, "z": 3, "block": "oak_leaves" },
+    { "x": 3, "y": 6, "z": 2, "block": "oak_leaves" }
+  ]
+}
