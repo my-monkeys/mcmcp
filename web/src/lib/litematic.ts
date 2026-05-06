@@ -51,16 +51,31 @@ function bitsPerEntryFor(paletteSize: number): number {
   return Math.max(min, need);
 }
 
+// Litematica uses straddling bit-packing in its `LitematicaBitArray`: each
+// entry occupies `bitsPerEntry` consecutive bits and may cross a 64-bit long
+// boundary. This is NOT Minecraft's post-1.16 non-straddling Anvil layout —
+// loading a non-straddling file into Litematica produces garbage.
 function packBlockStates(indices: number[], bitsPerEntry: number): [number, number][] {
-  const entriesPerLong = Math.floor(64 / bitsPerEntry);
-  const numLongs = Math.ceil(indices.length / entriesPerLong);
+  const totalBits = indices.length * bitsPerEntry;
+  const numLongs = Math.ceil(totalBits / 64);
   const longs = new Array<bigint>(numLongs).fill(0n);
   const bpe = BigInt(bitsPerEntry);
+  const mask = (1n << bpe) - 1n;
+
   for (let i = 0; i < indices.length; i++) {
-    const longIdx = Math.floor(i / entriesPerLong);
-    const bitOffset = BigInt(i % entriesPerLong) * bpe;
-    longs[longIdx]! |= BigInt(indices[i]!) << bitOffset;
+    const value = BigInt(indices[i]!) & mask;
+    const startBit = i * bitsPerEntry;
+    const longIdx = startBit >>> 6;
+    const bitOffset = startBit & 63;
+
+    longs[longIdx]! |= value << BigInt(bitOffset);
+
+    const bitsInFirst = 64 - bitOffset;
+    if (bitsInFirst < bitsPerEntry) {
+      longs[longIdx + 1]! |= value >> BigInt(bitsInFirst);
+    }
   }
+
   return longs.map((b) => {
     const hi = Number((b >> 32n) & 0xffffffffn) | 0;
     const lo = Number(b & 0xffffffffn) | 0;
