@@ -12,6 +12,6 @@
     "startup_file": "server.js"
   },
   "post_deploy": "mkdir -p tmp && touch tmp/restart.txt",
-  "sitemap": { "enabled": true },
-  "robots": { "enabled": true }
+  "sitemap": { "enabled": false },
+  "robots": { "enabled": false }
 }
