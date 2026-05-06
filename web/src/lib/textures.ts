@@ -9,7 +9,11 @@ export type ManifestEntry =
   | { type: 'cross'; all: string; tint?: TintFace[] }
   | { type: 'flat'; all: string; tint?: TintFace[] }
   | { type: 'slab' | 'slab_top' | 'stairs'; top: string; side: string; bottom: string }
-  | { type: 'fence' | 'wall'; all: string };
+  | { type: 'fence' | 'wall'; all: string }
+  // Small block sitting on the ground, custom UVs that crop the side panel
+  // out of the multi-panel lantern texture (16x16 sprite atlas after the
+  // animation slice). Tint never applies.
+  | { type: 'lantern'; all: string };
 
 export type TintFace = 'all' | 'top' | 'side' | 'bottom';
 
@@ -33,6 +37,7 @@ export function entryToFaces(entry: ManifestEntry): FaceOrder {
     case 'flat':
     case 'fence':
     case 'wall':
+    case 'lantern':
       return [entry.all, entry.all, entry.all, entry.all, entry.all, entry.all] as const;
     case 'column':
       return [entry.side, entry.side, entry.top, entry.top, entry.side, entry.side] as const;

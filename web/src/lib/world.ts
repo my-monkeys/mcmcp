@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { blockKey, type BlockKey } from './types';
 import type { TextureLibrary } from './textureLibrary';
 import type { ManifestEntry } from './textures';
-import { crossGeometry, cubeGeometry, flatGeometry, slabGeometry, stairsGeometry, type StairFacing } from './geometries';
+import { crossGeometry, cubeGeometry, flatGeometry, lanternGeometry, slabGeometry, stairsGeometry, type StairFacing } from './geometries';
 
 function normalizeBlockType(raw: string): string {
   return raw.replace(/^minecraft:/, '').split('[')[0]!.trim();
@@ -41,6 +41,7 @@ function geometryFor(entry: ManifestEntry | null, stateKey: string): THREE.Buffe
   if (!entry) return cubeGeometry();
   if (entry.type === 'cross') return crossGeometry();
   if (entry.type === 'flat') return flatGeometry();
+  if (entry.type === 'lantern') return lanternGeometry();
   if (!stateKey) return cubeGeometry();
   if (entry.type === 'slab' || entry.type === 'slab_top') {
     if (stateKey === 't=double') return cubeGeometry();

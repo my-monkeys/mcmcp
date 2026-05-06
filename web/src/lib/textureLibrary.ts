@@ -27,12 +27,23 @@ const ID_PATTERN_ALIASES: ReadonlyArray<readonly [RegExp, string]> = [
   [/^(.+)_shulker_box$/, '_concrete'],
 ] as const;
 
-function resolveBlockId(id: string): string {
+/**
+ * Resolve a block id to a manifest key. Aliases only apply when the raw id
+ * isn't itself in the manifest — `grass` lives directly in 1.20 (cross plant)
+ * but was renamed to `short_grass` in 1.20+. Trying raw first means each
+ * version uses whichever name it has, and aliases only kick in for legacy ids
+ * that have truly been renamed away in this version.
+ */
+function resolveBlockId(id: string, manifest: Manifest | null): string {
+  if (manifest && id in manifest.blocks) return id;
   const direct = BLOCK_ID_ALIASES[id];
-  if (direct) return direct;
+  if (direct && manifest && direct in manifest.blocks) return direct;
   for (const [re, suffix] of ID_PATTERN_ALIASES) {
     const m = re.exec(id);
-    if (m) return `${m[1]}${suffix}`;
+    if (m) {
+      const candidate = `${m[1]}${suffix}`;
+      if (manifest && candidate in manifest.blocks) return candidate;
+    }
   }
   return id;
 }
@@ -134,7 +145,7 @@ export class TextureLibrary {
     const cached = this.materialsByBlock.get(id);
     if (cached) return cached;
 
-    const entry = this.manifest?.blocks[resolveBlockId(id)];
+    const entry = this.manifest?.blocks[resolveBlockId(id, this.manifest)];
     if (!entry) {
       console.warn(`[TextureLibrary] block "${id}" not in manifest, using hash fallback`);
       const fb = this.getFallback(id);
@@ -221,7 +232,7 @@ export class TextureLibrary {
 
   /** Used by the block palette UI to find the icon texture for a block id. */
   iconTextureFor(blockId: string): string | null {
-    const entry = this.manifest?.blocks[resolveBlockId(blockId)];
+    const entry = this.manifest?.blocks[resolveBlockId(blockId, this.manifest)];
     if (!entry) return null;
     const faces = entryToFaces(entry);
     return faces[2]!; // top face — most recognizable for a block icon
@@ -229,12 +240,12 @@ export class TextureLibrary {
 
   /** Returns true if the block id is a column type (logs, basalt, etc.) that respects the axis property. */
   isColumn(blockId: string): boolean {
-    const entry = this.manifest?.blocks[resolveBlockId(blockId)];
+    const entry = this.manifest?.blocks[resolveBlockId(blockId, this.manifest)];
     return entry?.type === 'column';
   }
 
   getEntry(blockId: string): ManifestEntry | null {
-    return this.manifest?.blocks[resolveBlockId(blockId)] ?? null;
+    return this.manifest?.blocks[resolveBlockId(blockId, this.manifest)] ?? null;
   }
 }
 

@@ -1987,7 +1987,7 @@
       "all": "ladder"
     },
     "lantern": {
-      "type": "all",
+      "type": "lantern",
       "all": "lantern"
     },
     "lapis_block": {
@@ -3447,7 +3447,7 @@
       "all": "sea_pickle"
     },
     "seagrass": {
-      "type": "all",
+      "type": "cross",
       "all": "seagrass"
     },
     "shroomlight": {
@@ -3567,7 +3567,7 @@
       "all": "soul_fire_0"
     },
     "soul_lantern": {
-      "type": "all",
+      "type": "lantern",
       "all": "soul_lantern"
     },
     "soul_sand": {
@@ -3872,7 +3872,7 @@
       ]
     },
     "tall_seagrass": {
-      "type": "all",
+      "type": "cross",
       "all": "tall_seagrass_bottom"
     },
     "target": {
@@ -3952,8 +3952,9 @@
       "side": "verdant_froglight_side"
     },
     "vine": {
-      "type": "all",
-      "all": "vine"
+      "type": "flat",
+      "all": "vine",
+      "tint": ["all"]
     },
     "wall_torch": {
       "type": "cross",

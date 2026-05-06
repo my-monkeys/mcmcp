@@ -88,6 +88,48 @@ export function crossGeometry(): THREE.BufferGeometry {
   return geo;
 }
 
+/**
+ * Small lantern body — 6×7×6 (in MC pixel units, /16) sitting on the floor.
+ * UVs crop the side panel of the lantern atlas: x∈[0..6/16], y∈[2..9/16] in
+ * vanilla UV space (top-left origin). Three.js uses bottom-left UVs and the
+ * texture has flipY=true (default), so a model UV (u,v) at vanilla coords
+ * (px_x, px_y) becomes (px_x/16, 1 - px_y/16). The animation slice in
+ * configurePixelTexture (repeat.y=1/3, offset.y=2/3 for 16x48) re-maps
+ * v∈[0..1] back into the top frame, so we can write UVs in [0..1] of the
+ * top frame without further compensation.
+ *
+ * Sides use vanilla UV [0,2,6,9] → three UVs U∈[0..6/16], V∈[7/16..14/16].
+ * Top/bottom use vanilla UV [0,9,6,15] → U∈[0..6/16], V∈[1/16..7/16].
+ */
+export function lanternGeometry(): THREE.BufferGeometry {
+  const w = 6 / 16;
+  const h = 7 / 16;
+  const d = 6 / 16;
+  const yOffset = -0.5 + h / 2; // sit on the floor of the unit cell
+  const box = new THREE.BoxGeometry(w, h, d).translate(0, yOffset, 0);
+
+  const sideU = [0, 6 / 16, 7 / 16, 14 / 16];
+  const topU = [0, 6 / 16, 1 / 16, 7 / 16];
+  const setFaceUV = (faceIdx: number, u0: number, u1: number, v0: number, v1: number) => {
+    const uvAttr = box.getAttribute('uv') as THREE.BufferAttribute;
+    const base = faceIdx * 4;
+    // BoxGeometry vertex order per face: top-left, top-right, bottom-left, bottom-right
+    uvAttr.setXY(base + 0, u0, v1);
+    uvAttr.setXY(base + 1, u1, v1);
+    uvAttr.setXY(base + 2, u0, v0);
+    uvAttr.setXY(base + 3, u1, v0);
+    uvAttr.needsUpdate = true;
+  };
+  // Faces: 0=+X, 1=-X, 2=+Y (top), 3=-Y (bottom), 4=+Z, 5=-Z
+  setFaceUV(0, sideU[0]!, sideU[1]!, sideU[2]!, sideU[3]!);
+  setFaceUV(1, sideU[0]!, sideU[1]!, sideU[2]!, sideU[3]!);
+  setFaceUV(2, topU[0]!, topU[1]!, topU[2]!, topU[3]!);
+  setFaceUV(3, topU[0]!, topU[1]!, topU[2]!, topU[3]!);
+  setFaceUV(4, sideU[0]!, sideU[1]!, sideU[2]!, sideU[3]!);
+  setFaceUV(5, sideU[0]!, sideU[1]!, sideU[2]!, sideU[3]!);
+  return box;
+}
+
 export type StairFacing = 'north' | 'south' | 'east' | 'west';
 
 export function stairsGeometry(facing: StairFacing, half: 'bottom' | 'top'): THREE.BufferGeometry {

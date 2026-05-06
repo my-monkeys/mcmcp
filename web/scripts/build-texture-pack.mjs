@@ -356,6 +356,17 @@ async function main() {
     redstone_wall_torch:   { type: 'cross', all: 'redstone_torch' },
     soul_wall_torch:       { type: 'cross', all: 'soul_torch' },
     lily_pad:              { type: 'flat',  all: 'lily_pad', tint: ['all'] },
+    // Vines hang from blocks; the inferEntry heuristic emits cube_all for them.
+    // Render as a tinted flat plane so they read as foliage rather than a teal cube.
+    vine:                  { type: 'flat',  all: 'vine', tint: ['all'] },
+    // seagrass.png is naturally teal — already-correct color, no tint needed.
+    // Heuristic emits cube_all; render as cross so it looks like underwater grass.
+    seagrass:              { type: 'cross', all: 'seagrass' },
+    tall_seagrass:         { type: 'cross', all: 'tall_seagrass_bottom' },
+    // Lanterns use a 16x48 multi-panel atlas; a regular cube shows the wrong
+    // section. Custom geometry + UVs in the web viewer (see lanternGeometry).
+    lantern:               { type: 'lantern', all: 'lantern' },
+    soul_lantern:          { type: 'lantern', all: 'soul_lantern' },
   };
   for (const [id, override] of Object.entries(SHAPE_OVERRIDES)) {
     if (blocks[id]) {
