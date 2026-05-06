@@ -19,6 +19,7 @@ import {
   type Region,
 } from './store.js';
 import { buildLitematic } from './litematic.js';
+import { buildBg2Template } from './bg2template.js';
 
 const SUPABASE_URL = process.env.MCMCP_SUPABASE_URL ?? 'https://klliwmgdyuatstjvzzbb.supabase.co';
 const SUPABASE_KEY =
@@ -590,6 +591,49 @@ server.registerTool(
       return text(
         `Exported ${result.totalBlocks} blocks (palette=${result.paletteSize}, bits/entry=${result.bitsPerEntry}, ` +
           `${result.buffer.length} bytes gzipped) to:\n${target}`
+      );
+    } catch (e) {
+      return error(e instanceof Error ? e.message : String(e));
+    }
+  }
+);
+
+server.registerTool(
+  'export_bg2_template',
+  {
+    title: 'Export the session as a Building Gadgets 2 template',
+    description:
+      'Encode the current session as a Building Gadgets 2 (BG2) Template JSON and write it to disk. ' +
+      'Returns the absolute path of the saved file. The user opens the file, copies its contents, ' +
+      'and pastes them into BG2\'s Template Manager "Load from JSON" input in-game.',
+    inputSchema: {
+      name: z.string().min(1).max(64).optional().describe('Template display name (defaults to "mcmcp <session>").'),
+      output_path: z
+        .string()
+        .optional()
+        .describe('Absolute path for the .json file. Defaults to ~/Downloads/mcmcp-exports/<session>-<ts>-bg2.json.'),
+      session_id: z.string().length(6).optional(),
+    },
+  },
+  async ({ name, output_path, session_id }) => {
+    try {
+      const id = resolveSession(session_id);
+      const session = await store.getSession(id);
+      const rows = await store.getAll(id);
+      const result = buildBg2Template(session, rows, { name });
+
+      let target = output_path;
+      if (!target) {
+        await mkdir(EXPORT_DIR, { recursive: true });
+        const stamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_').split('.')[0];
+        target = join(EXPORT_DIR, `${id}-${stamp}-bg2.json`);
+      }
+      await writeFile(target, result.json, 'utf8');
+
+      return text(
+        `Exported ${result.totalBlocks} blocks (palette=${result.paletteSize}, ${result.json.length} bytes JSON) ` +
+          `as a BG2 template to:\n${target}\n\n` +
+          `To use: open the file, copy its contents, then paste into the Template Manager in Minecraft (BG2).`
       );
     } catch (e) {
       return error(e instanceof Error ? e.message : String(e));

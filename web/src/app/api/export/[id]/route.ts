@@ -1,9 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
 import { buildLitematic } from '@/lib/litematic';
+import { buildBg2Template } from '@/lib/bg2template';
 import type { Session, Block } from '@/lib/types';
 
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const format = new URL(req.url).searchParams.get('format');
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -33,6 +35,16 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     blocks.push(...(data as Block[]));
     if (data.length < PAGE) break;
     offset += PAGE;
+  }
+
+  if (format === 'bg2') {
+    const { json } = buildBg2Template(session as Session, blocks);
+    return new Response(json, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Disposition': `attachment; filename="mcmcp-${id}.json"`,
+      },
+    });
   }
 
   const { buffer } = buildLitematic(session as Session, blocks);

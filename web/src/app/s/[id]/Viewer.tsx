@@ -30,6 +30,7 @@ export default function Viewer({ session }: Props) {
   const [pickToast, setPickToast] = useState<string | null>(null);
   const [version, setVersion] = useState<McVersion>(() => asMcVersion(session.mc_version));
   const [exporting, setExporting] = useState(false);
+  const [bg2State, setBg2State] = useState<'idle' | 'copying' | 'copied' | 'error'>('idle');
   const [diagLogs, setDiagLogs] = useState<string[]>([]);
   const [selectionEnabled, setSelectionEnabled] = useState(false);
   const [selection, setSelection] = useState<Selection>({
@@ -185,6 +186,22 @@ export default function Viewer({ session }: Props) {
     }
   };
 
+  const handleCopyBg2 = async () => {
+    if (count === 0) return;
+    setBg2State('copying');
+    try {
+      const res = await fetch(`/api/export/${session.id}?format=bg2`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.text();
+      const ok = await copyText(json);
+      setBg2State(ok ? 'copied' : 'error');
+    } catch {
+      setBg2State('error');
+    } finally {
+      setTimeout(() => setBg2State('idle'), 2000);
+    }
+  };
+
   return (
     <div className="relative h-dvh w-dvw bg-zinc-950 text-zinc-100 overflow-hidden">
       <div ref={containerRef} className="absolute inset-0">
@@ -278,6 +295,23 @@ export default function Viewer({ session }: Props) {
           className="bg-zinc-900/80 backdrop-blur border border-zinc-800 rounded-lg px-3 py-2 text-xs hover:bg-zinc-800 transition disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {exporting ? 'Exporting…' : count === 0 ? 'No blocks' : 'Download .litematic'}
+        </button>
+
+        <button
+          onClick={handleCopyBg2}
+          disabled={bg2State === 'copying' || count === 0}
+          className="bg-zinc-900/80 backdrop-blur border border-zinc-800 rounded-lg px-3 py-2 text-xs hover:bg-zinc-800 transition disabled:opacity-40 disabled:cursor-not-allowed"
+          title="Copy a Building Gadgets 2 template JSON to your clipboard. Paste it into the Template Manager in-game."
+        >
+          {bg2State === 'copying'
+            ? 'Copying…'
+            : bg2State === 'copied'
+            ? 'Copied BG2 template!'
+            : bg2State === 'error'
+            ? 'Copy failed'
+            : count === 0
+            ? 'No blocks'
+            : 'Copy BG2 template'}
         </button>
 
         <div className="bg-zinc-900/80 backdrop-blur border border-zinc-800 rounded-lg px-4 py-3 text-xs space-y-3 min-w-56">
