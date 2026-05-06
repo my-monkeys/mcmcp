@@ -6,3 +6,5 @@
 .next/
 dist/
 *.tsbuildinfo
+.DS_Store
+.superpowers/
