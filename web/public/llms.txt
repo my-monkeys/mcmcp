@@ -1,0 +1,11 @@
+# mcmcp
+> AI-powered Minecraft schematic builder. An MCP server connects Claude (or any MCP-compatible client) to a live 3D viewer; the AI places blocks, fills regions, and exports .litematic schematics for the Litematica mod. Vanilla Minecraft 1.16+ block textures.
+
+## Setup
+- Add the mcmcp server to your `~/.claude.json` MCP config.
+- Get a session ID from https://mcmcp.my-monkey.fr — set `MCMCP_SESSION_ID` in the env block.
+- Open the viewer at `https://mcmcp.my-monkey.fr/s/<session-id>` to watch builds in real time.
+
+## Source
+- GitHub: https://github.com/my-monkeys/mcmcp
+- MCP server source: https://github.com/my-monkeys/mcmcp/tree/main/mcp
