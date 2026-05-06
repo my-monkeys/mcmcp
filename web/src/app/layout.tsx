@@ -13,8 +13,15 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "mcmcp — schematic builder",
-  description: "Build Minecraft schematics with an AI through MCP, viewed in real-time.",
+  title: "mcmcp — Build Minecraft Schematics with AI",
+  description:
+    "Connect Claude to your Minecraft world through MCP. Place blocks, fill regions, and export .litematic files — all in real-time with a live 3D viewer.",
+  openGraph: {
+    title: "mcmcp — Build Minecraft Schematics with AI",
+    description:
+      "Connect Claude to your Minecraft world through MCP. Place blocks, fill regions, and export .litematic files — all in real-time with a live 3D viewer.",
+    type: "website",
+  },
 };
 
 export default function RootLayout({
