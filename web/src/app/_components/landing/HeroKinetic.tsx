@@ -84,7 +84,7 @@ export function HeroKinetic() {
     <section
       ref={root}
       data-section="hero"
-      className="relative min-h-dvh md:min-h-[200vh] flex items-center justify-center px-6 overflow-hidden"
+      className="relative min-h-dvh flex items-center justify-center px-6 overflow-hidden"
     >
       <h1
         data-hero-title
