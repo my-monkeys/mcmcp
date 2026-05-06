@@ -23,6 +23,7 @@ export default function Viewer({ session }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneRef = useRef<SceneHandles | null>(null);
+  const biomeStatusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [count, setCount] = useState(0);
   const [status, setStatus] = useState<'connecting' | 'live' | 'offline'>('connecting');
   const [copied, setCopied] = useState(false);
@@ -164,6 +165,12 @@ export default function Viewer({ session }: Props) {
     sceneRef.current?.setSelection(selectionEnabled ? selection : null);
   }, [selectionEnabled, selection]);
 
+  useEffect(() => {
+    return () => {
+      if (biomeStatusTimer.current) clearTimeout(biomeStatusTimer.current);
+    };
+  }, []);
+
   const onChangeVersion = async (v: McVersion) => {
     setVersion(v);
     const { error } = await supabase
@@ -234,7 +241,8 @@ export default function Viewer({ session }: Props) {
         setBiomeStatus(`Writing ${Math.min(i + BATCH, placements.length)} / ${placements.length}…`);
       }
       setBiomeStatus(`Generated ${biome} (${placements.length} blocks)`);
-      setTimeout(() => setBiomeStatus(null), 3000);
+      if (biomeStatusTimer.current) clearTimeout(biomeStatusTimer.current);
+      biomeStatusTimer.current = setTimeout(() => setBiomeStatus(null), 3000);
     } catch (e) {
       setBiomeStatus(`Error: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
