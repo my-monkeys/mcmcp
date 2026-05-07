@@ -2,7 +2,9 @@
 import type { BiomeConfig } from '../types';
 
 export const PlainsConfig: BiomeConfig = {
-  heightmap: { base: 32, amplitude: 4, octaves: 3, frequency: 0.05 },
+  // Very gentle terrain: 2 octaves + small amplitude keeps it flat without
+  // the high-freq spikes that 3+ octaves were producing.
+  heightmap: { base: 32, amplitude: 2, octaves: 2, frequency: 0.03 },
   blocks: {
     surface: 'grass_block',
     subsurface: 'dirt',

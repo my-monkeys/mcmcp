@@ -128,15 +128,14 @@ function riverPass(
       const v = Math.abs(riverNoise(x * r.frequency, z * r.frequency));
       const surfaceY = heightmap.get(`${x},${z}`)!;
       if (v < r.threshold) {
-        // River cell — water on top, dirt bed below.
-        cells.set(cellKey(x, surfaceY, z), 'water');
-        const bedY = surfaceY - 1;
-        if (bedY >= region.y1) {
-          const k = cellKey(x, bedY, z);
-          const cur = cells.get(k);
-          if (cur === cfg.blocks.subsurface || cur === cfg.blocks.fill) {
-            cells.set(k, 'dirt');
-          }
+        // Carve the river: the surface block is removed (the channel is
+        // dug into the terrain) and water sits one block below the
+        // surrounding land surface — so the water is naturally contained
+        // by neighbouring land and won't flow out when loaded in MC.
+        cells.delete(cellKey(x, surfaceY, z));
+        const waterY = surfaceY - 1;
+        if (waterY >= region.y1) {
+          cells.set(cellKey(x, waterY, z), 'water');
         }
       } else if (bank && bankOuter !== null && v < bankOuter) {
         // Bank strip — replace surface block with sand / gravel.

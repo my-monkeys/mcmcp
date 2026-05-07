@@ -99,14 +99,12 @@ function riverPass(
       const v = Math.abs(riverNoise(x * r.frequency, z * r.frequency));
       const surfaceY = heightmap.get(`${x},${z}`)!;
       if (v < r.threshold) {
-        cells.set(cellKey(x, surfaceY, z), 'water');
-        const bedY = surfaceY - 1;
-        if (bedY >= region.y1) {
-          const k = cellKey(x, bedY, z);
-          const cur = cells.get(k);
-          if (cur === cfg.blocks.subsurface || cur === cfg.blocks.fill) {
-            cells.set(k, 'dirt');
-          }
+        // Carve the river: surface block removed, water one block below the
+        // surrounding land surface so the channel stays contained.
+        cells.delete(cellKey(x, surfaceY, z));
+        const waterY = surfaceY - 1;
+        if (waterY >= region.y1) {
+          cells.set(cellKey(x, waterY, z), 'water');
         }
       } else if (bank && bankOuter !== null && v < bankOuter) {
         cells.set(cellKey(x, surfaceY, z), bank);
