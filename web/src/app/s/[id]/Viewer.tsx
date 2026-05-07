@@ -8,7 +8,7 @@ import { copyText } from '@/lib/clipboard';
 import MaterialsPanel, { type Material } from './MaterialsPanel';
 import SelectionPanel, { type Selection } from './SelectionPanel';
 import { BiomePanel } from './BiomePanel';
-import { generateBiome, type BiomeName } from '@/lib/biome';
+import { generateBiome, type BiomeName, type RiversConfig } from '@/lib/biome';
 
 type Props = { session: Session };
 
@@ -41,6 +41,11 @@ export default function Viewer({ session }: Props) {
   // Cells we've just applied optimistically. The realtime sub will receive an
   // echo for each one shortly after — we skip those so we don't re-animate.
   const optimisticKeys = useRef<Set<string>>(new Set());
+
+  // Last set of placements we wrote to the local Three.js world. Lets the
+  // tweak handler (slider drag) compute a diff and only animate the cells
+  // that actually changed since the last regen.
+  const lastBiomeMap = useRef<Map<string, string>>(new Map());
   const [biomeStatus, setBiomeStatus] = useState<string | null>(null);
   const [diagLogs, setDiagLogs] = useState<string[]>([]);
   const [selectionEnabled, setSelectionEnabled] = useState(false);
@@ -238,6 +243,7 @@ export default function Viewer({ session }: Props) {
         setCount(0);
         setMaterials([]);
       }
+      lastBiomeMap.current = new Map();
       const { error: e } = await supabase
         .from('mcmcp_blocks')
         .delete()
@@ -251,9 +257,15 @@ export default function Viewer({ session }: Props) {
     }
   };
 
-  const handleGenerateBiome = async (biome: BiomeName, seed: number, rivers: boolean) => {
-    setBiomeBusy(true);
-    setBiomeStatus('Generating…');
+  const applyBiome = async (
+    persist: boolean,
+    biome: BiomeName,
+    seed: number,
+    rivers: boolean,
+    override: Partial<RiversConfig>,
+  ) => {
+    if (persist) setBiomeBusy(true);
+    setBiomeStatus(persist ? 'Generating…' : 'Tweaking…');
     try {
       const region = selectionEnabled ? selection : undefined;
       const placements = await generateBiome({
@@ -262,19 +274,56 @@ export default function Viewer({ session }: Props) {
         seed,
         region,
         rivers,
+        riverOverride: override,
       });
 
-      // Group placements by 16×16 (xz) chunk and sort chunks by distance from
-      // the region's centre. Produces a Minecraft-style "chunks light up from
-      // the middle outwards" apparition.
-      const chunkMap = new Map<string, typeof placements>();
-      for (const p of placements) {
-        const cx = Math.floor(p.x / 16);
-        const cz = Math.floor(p.z / 16);
+      // Build a Map<key, block> for the new state, then diff against the
+      // previous biome state. Only changed/added/removed cells touch the
+      // local world — unchanged cells stay put with no re-animation.
+      const newMap = new Map<string, string>();
+      for (const p of placements) newMap.set(`${p.x},${p.y},${p.z}`, p.block);
+      const prevMap = lastBiomeMap.current;
+
+      const removed: { x: number; y: number; z: number }[] = [];
+      const added: { x: number; y: number; z: number; block: string }[] = [];
+      const changed: { x: number; y: number; z: number; block: string }[] = [];
+
+      for (const [key] of prevMap) {
+        if (!newMap.has(key)) {
+          const [xs, ys, zs] = key.split(',');
+          removed.push({ x: Number(xs), y: Number(ys), z: Number(zs) });
+        }
+      }
+      for (const [key, newBlock] of newMap) {
+        const prevBlock = prevMap.get(key);
+        const [xs, ys, zs] = key.split(',');
+        if (prevBlock === undefined) {
+          added.push({ x: Number(xs), y: Number(ys), z: Number(zs), block: newBlock });
+        } else if (prevBlock !== newBlock) {
+          changed.push({ x: Number(xs), y: Number(ys), z: Number(zs), block: newBlock });
+        }
+      }
+
+      const world = sceneRef.current?.world;
+
+      // Apply removed and changed inline — usually small lists.
+      if (world) {
+        for (const r of removed) world.removeBlock(r.x, r.y, r.z);
+        for (const c of changed) world.setBlock(c.x, c.y, c.z, c.block, true);
+      }
+
+      // Group `added` placements by 16×16 chunk and apply chunk by chunk
+      // sorted from the region centre outwards. Produces the Minecraft-style
+      // wave on first generate; tweaks usually only touch a handful of
+      // chunks so the wave is barely perceptible.
+      const chunkMap = new Map<string, typeof added>();
+      for (const a of added) {
+        const cx = Math.floor(a.x / 16);
+        const cz = Math.floor(a.z / 16);
         const k = `${cx},${cz}`;
         let arr = chunkMap.get(k);
         if (!arr) { arr = []; chunkMap.set(k, arr); }
-        arr.push(p);
+        arr.push(a);
       }
       const x1 = region?.x1 ?? 0;
       const z1 = region?.z1 ?? 0;
@@ -295,55 +344,91 @@ export default function Viewer({ session }: Props) {
         })
         .sort((a, b) => a.dist - b.dist);
 
-      // Optimistic UI: apply each chunk to the local Three.js world (with
-      // spawn animation), persist to Supabase in parallel without awaiting
-      // the network round trip. The realtime sub filters out the echoes so
-      // we don't re-animate.
+      // Persist strategy (only when persist=true): clear the session in
+      // Supabase, then bulk-upsert all new placements in parallel with the
+      // local apparition. Optimistic-key set filters echoes.
       const persistPromises: PromiseLike<unknown>[] = [];
+      if (persist) {
+        persistPromises.push(
+          supabase
+            .from('mcmcp_blocks')
+            .delete()
+            .eq('session_id', session.id)
+            .then(({ error: e }) => { if (e) console.error('Persist reset error:', e); }),
+        );
+      }
+
       let appliedCount = 0;
+      const totalToApply = added.length;
       for (const chunk of chunks) {
-        const world = sceneRef.current?.world;
         if (world) {
-          for (const p of chunk.blocks) {
-            optimisticKeys.current.add(`${p.x},${p.y},${p.z}`);
-            world.setBlock(p.x, p.y, p.z, p.block, true);
+          for (const a of chunk.blocks) {
+            if (persist) optimisticKeys.current.add(`${a.x},${a.y},${a.z}`);
+            world.setBlock(a.x, a.y, a.z, a.block, true);
           }
           setCount(world.blockCount);
         }
         appliedCount += chunk.blocks.length;
-        setBiomeStatus(`${appliedCount.toLocaleString()} / ${placements.length.toLocaleString()} blocks`);
+        if (totalToApply > 0) {
+          setBiomeStatus(`${appliedCount.toLocaleString()} / ${totalToApply.toLocaleString()} blocks`);
+        }
 
-        const rows = chunk.blocks.map((p) => ({
-          session_id: session.id,
-          x: p.x, y: p.y, z: p.z,
-          block_type: p.block,
-        }));
-        persistPromises.push(
-          supabase
-            .from('mcmcp_blocks')
-            .upsert(rows, { onConflict: 'session_id,x,y,z' })
-            .then(({ error: e }) => {
-              if (e) console.error('Persist chunk error:', e);
-            }),
-        );
+        if (persist) {
+          const rows = chunk.blocks.map((p) => ({
+            session_id: session.id,
+            x: p.x, y: p.y, z: p.z,
+            block_type: p.block,
+          }));
+          persistPromises.push(
+            supabase
+              .from('mcmcp_blocks')
+              .upsert(rows, { onConflict: 'session_id,x,y,z' })
+              .then(({ error: e }) => { if (e) console.error('Persist chunk error:', e); }),
+          );
+        }
 
-        // Yield one frame so the renderer paints the new blocks before we
-        // start the next chunk — this is what produces the visible wave.
         await new Promise<void>((r) => requestAnimationFrame(() => r()));
       }
 
-      setBiomeStatus(`Saving ${placements.length.toLocaleString()} blocks…`);
-      await Promise.all(persistPromises);
+      lastBiomeMap.current = newMap;
 
-      setBiomeStatus(`Generated ${biome} (${placements.length.toLocaleString()} blocks)`);
+      if (persist) {
+        if (changed.length > 0) {
+          const rows = changed.map((p) => ({
+            session_id: session.id,
+            x: p.x, y: p.y, z: p.z,
+            block_type: p.block,
+          }));
+          persistPromises.push(
+            supabase
+              .from('mcmcp_blocks')
+              .upsert(rows, { onConflict: 'session_id,x,y,z' })
+              .then(({ error: e }) => { if (e) console.error('Persist changed error:', e); }),
+          );
+        }
+        setBiomeStatus(`Saving ${placements.length.toLocaleString()} blocks…`);
+        await Promise.all(persistPromises);
+        setBiomeStatus(`Generated ${biome} (${placements.length.toLocaleString()} blocks)`);
+      } else {
+        const total = added.length + changed.length + removed.length;
+        setBiomeStatus(total > 0 ? `${total.toLocaleString()} cell${total > 1 ? 's' : ''} updated` : 'No change');
+      }
       if (biomeStatusTimer.current) clearTimeout(biomeStatusTimer.current);
-      biomeStatusTimer.current = setTimeout(() => setBiomeStatus(null), 3000);
+      biomeStatusTimer.current = setTimeout(() => setBiomeStatus(null), persist ? 3000 : 1500);
     } catch (e) {
       setBiomeStatus(`Error: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
-      setBiomeBusy(false);
+      if (persist) setBiomeBusy(false);
     }
   };
+
+  const handleGenerateBiome = (
+    biome: BiomeName, seed: number, rivers: boolean, override: Partial<RiversConfig>,
+  ) => applyBiome(true, biome, seed, rivers, override);
+
+  const handleTweakBiome = (
+    biome: BiomeName, seed: number, rivers: boolean, override: Partial<RiversConfig>,
+  ) => applyBiome(false, biome, seed, rivers, override);
 
   return (
     <div className="relative h-dvh w-dvw bg-zinc-950 text-zinc-100 overflow-hidden">
@@ -462,6 +547,7 @@ export default function Viewer({ session }: Props) {
           busy={biomeBusy}
           status={biomeStatus}
           onGenerate={handleGenerateBiome}
+          onTweak={handleTweakBiome}
         />
 
         <button

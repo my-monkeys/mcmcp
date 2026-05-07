@@ -22,6 +22,10 @@ export type GenerateOptions = {
   /** Opt-in. When true and the biome has a `rivers` config, the pipeline
    * carves serpentine river channels using a separate noise stream. */
   rivers?: boolean;
+  /** Optional overrides for the biome's default river params (threshold,
+   * frequency, bankWidth). Each field is applied on top of the biome's
+   * RiversConfig. Useful for live-tweaking from the UI. */
+  riverOverride?: Partial<RiversConfig>;
 };
 
 export type HeightmapConfig = {

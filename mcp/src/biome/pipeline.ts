@@ -1,5 +1,5 @@
 // mcp/src/biome/pipeline.ts
-import type { BiomeConfig, GenerateOptions, Placement, Region } from './types.js';
+import type { BiomeConfig, GenerateOptions, Placement, Region, RiversConfig } from './types.js';
 import type { Rng } from './rng.js';
 import { createRng } from './rng.js';
 import { createNoise2D, fbm, type Noise2D } from './noise.js';
@@ -89,9 +89,9 @@ function riverPass(
   heightmap: Map<string, number>,
   region: Region,
   riverNoise: Noise2D,
+  rivers: RiversConfig,
 ): void {
-  const r = cfg.rivers;
-  if (!r) return;
+  const r = rivers;
   const bank = cfg.blocks.beach;
   const bankOuter = bank && r.bankWidth ? r.threshold + r.bankWidth : null;
   for (let x = region.x1; x <= region.x2; x++) {
@@ -194,7 +194,10 @@ export function runPipeline(cfg: BiomeConfig, opts: GenerateOptions): Placement[
   terrainFillPass(cfg, cells, heightmap, region);
   surfacePass(cfg, cells, heightmap, region);
   waterPass(cfg, cells, heightmap, region);
-  if (opts.rivers) riverPass(cfg, cells, heightmap, region, riverNoise);
+  if (opts.rivers && cfg.rivers) {
+    const effectiveRivers: RiversConfig = { ...cfg.rivers, ...(opts.riverOverride ?? {}) };
+    riverPass(cfg, cells, heightmap, region, riverNoise, effectiveRivers);
+  }
   featurePass(cfg, cells, heightmap, region, rng);
 
   const out: Placement[] = [];

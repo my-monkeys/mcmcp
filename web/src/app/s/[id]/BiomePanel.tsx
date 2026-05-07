@@ -1,8 +1,9 @@
 // web/src/app/s/[id]/BiomePanel.tsx
 'use client';
 
-import { useState } from 'react';
-import type { BiomeName } from '@/lib/biome';
+import { useEffect, useRef, useState } from 'react';
+import type { BiomeName, RiversConfig } from '@/lib/biome';
+import { getBiomeRivers } from '@/lib/biome';
 
 const BIOMES: { value: BiomeName; label: string }[] = [
   { value: 'plains',  label: 'Plains' },
@@ -12,34 +13,79 @@ const BIOMES: { value: BiomeName; label: string }[] = [
   { value: 'mesa',    label: 'Mesa' },
 ];
 
+const BIOMES_WITH_RIVERS: ReadonlySet<BiomeName> = new Set(['plains', 'forest', 'taiga']);
+
+// Slider ranges. Defaults come from each biome's BiomeConfig.rivers and reset
+// on biome change.
+const W_MIN = 0.05;
+const W_MAX = 0.20;
+const F_MIN = 0.005;
+const F_MAX = 0.04;
+
 type Props = {
   hasExistingBlocks: boolean;
   busy: boolean;
   status: string | null;
-  onGenerate: (biome: BiomeName, seed: number, rivers: boolean) => void;
+  onGenerate: (biome: BiomeName, seed: number, rivers: boolean, override: Partial<RiversConfig>) => void;
+  onTweak: (biome: BiomeName, seed: number, rivers: boolean, override: Partial<RiversConfig>) => void;
 };
 
-const BIOMES_WITH_RIVERS: ReadonlySet<BiomeName> = new Set(['plains', 'forest', 'taiga']);
+function defaultsFor(biome: BiomeName): { threshold: number; frequency: number } {
+  const r = getBiomeRivers(biome);
+  return {
+    threshold: r?.threshold ?? 0.14,
+    frequency: r?.frequency ?? 0.015,
+  };
+}
 
-export function BiomePanel({ hasExistingBlocks, busy, status, onGenerate }: Props) {
+export function BiomePanel({ hasExistingBlocks, busy, status, onGenerate, onTweak }: Props) {
   const [biome, setBiome] = useState<BiomeName>('plains');
   const [seed, setSeed] = useState<number>(() => Math.floor(Math.random() * 0x7fffffff));
   const [rivers, setRivers] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
+  const initialDefaults = defaultsFor('plains');
+  const [threshold, setThreshold] = useState(initialDefaults.threshold);
+  const [frequency, setFrequency] = useState(initialDefaults.frequency);
+
+  // Reset slider values to the new biome's defaults when biome changes.
+  useEffect(() => {
+    const d = defaultsFor(biome);
+    setThreshold(d.threshold);
+    setFrequency(d.frequency);
+  }, [biome]);
+
   const riversAvailable = BIOMES_WITH_RIVERS.has(biome);
+
+  // Live tweak: when sliders or rivers toggle move (and the user has already
+  // committed at least one Generate), call onTweak debounced.
+  const hasGeneratedOnce = useRef(false);
+  const tweakTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!hasGeneratedOnce.current) return;
+    if (tweakTimer.current) clearTimeout(tweakTimer.current);
+    tweakTimer.current = setTimeout(() => {
+      onTweak(biome, seed, rivers && riversAvailable, { threshold, frequency });
+    }, 150);
+    return () => {
+      if (tweakTimer.current) clearTimeout(tweakTimer.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [threshold, frequency, rivers, biome, seed]);
 
   const trigger = () => {
     if (hasExistingBlocks) {
       setConfirmOpen(true);
       return;
     }
-    onGenerate(biome, seed, rivers && riversAvailable);
+    hasGeneratedOnce.current = true;
+    onGenerate(biome, seed, rivers && riversAvailable, { threshold, frequency });
   };
 
   const confirm = () => {
     setConfirmOpen(false);
-    onGenerate(biome, seed, rivers && riversAvailable);
+    hasGeneratedOnce.current = true;
+    onGenerate(biome, seed, rivers && riversAvailable, { threshold, frequency });
   };
 
   return (
@@ -86,6 +132,41 @@ export function BiomePanel({ hasExistingBlocks, busy, status, onGenerate }: Prop
         />
         <span className="text-zinc-400">Rivers</span>
       </label>
+
+      {riversAvailable && rivers && (
+        <div className="space-y-2 pl-4 border-l border-zinc-800">
+          <label className="block">
+            <div className="flex justify-between text-zinc-500 mb-0.5">
+              <span>Width</span>
+              <span className="font-mono tabular-nums">{threshold.toFixed(2)}</span>
+            </div>
+            <input
+              type="range"
+              min={W_MIN}
+              max={W_MAX}
+              step={0.01}
+              value={threshold}
+              onChange={(e) => setThreshold(Number(e.target.value))}
+              className="w-full accent-blue-500"
+            />
+          </label>
+          <label className="block">
+            <div className="flex justify-between text-zinc-500 mb-0.5">
+              <span>Density</span>
+              <span className="font-mono tabular-nums">{frequency.toFixed(3)}</span>
+            </div>
+            <input
+              type="range"
+              min={F_MIN}
+              max={F_MAX}
+              step={0.005}
+              value={frequency}
+              onChange={(e) => setFrequency(Number(e.target.value))}
+              className="w-full accent-blue-500"
+            />
+          </label>
+        </div>
+      )}
 
       <button
         onClick={trigger}

@@ -4,6 +4,7 @@ import type {
   GenerateOptions,
   Placement,
   Region,
+  RiversConfig,
 } from './types';
 import type { Rng } from './rng';
 import { createRng } from './rng';
@@ -117,9 +118,9 @@ function riverPass(
   heightmap: Map<string, number>,
   region: Region,
   riverNoise: Noise2D,
+  rivers: RiversConfig,
 ): void {
-  const r = cfg.rivers;
-  if (!r) return;
+  const r = rivers;
   const bank = cfg.blocks.beach;
   const bankOuter = bank && r.bankWidth ? r.threshold + r.bankWidth : null;
   for (let x = region.x1; x <= region.x2; x++) {
@@ -233,7 +234,10 @@ export async function runPipeline(
   terrainFillPass(cfg, cells, heightmap, region);
   surfacePass(cfg, cells, heightmap, region);
   waterPass(cfg, cells, heightmap, region);
-  if (opts.rivers) riverPass(cfg, cells, heightmap, region, riverNoise);
+  if (opts.rivers && cfg.rivers) {
+    const effectiveRivers: RiversConfig = { ...cfg.rivers, ...(opts.riverOverride ?? {}) };
+    riverPass(cfg, cells, heightmap, region, riverNoise, effectiveRivers);
+  }
   await featurePass(cfg, cells, heightmap, region, rng);
 
   const out: Placement[] = [];
