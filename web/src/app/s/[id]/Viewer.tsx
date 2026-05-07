@@ -46,6 +46,11 @@ export default function Viewer({ session }: Props) {
   // tweak handler (slider drag) compute a diff and only animate the cells
   // that actually changed since the last regen.
   const lastBiomeMap = useRef<Map<string, string>>(new Map());
+
+  // Monotonic token. Every applyBiome call captures its own token; after each
+  // await it checks the token is still the latest. Lets a new slider tweak
+  // cleanly abort an in-flight one without leaving artefacts.
+  const generationToken = useRef(0);
   const [biomeStatus, setBiomeStatus] = useState<string | null>(null);
   const [diagLogs, setDiagLogs] = useState<string[]>([]);
   const [selectionEnabled, setSelectionEnabled] = useState(false);
@@ -264,6 +269,7 @@ export default function Viewer({ session }: Props) {
     rivers: boolean,
     override: Partial<RiversConfig>,
   ) => {
+    const myToken = ++generationToken.current;
     if (persist) setBiomeBusy(true);
     setBiomeStatus(persist ? 'Generating…' : 'Tweaking…');
     try {
@@ -276,6 +282,8 @@ export default function Viewer({ session }: Props) {
         rivers,
         riverOverride: override,
       });
+      // A newer call superseded us while we were generating — drop our work.
+      if (myToken !== generationToken.current) return;
 
       // Build a Map<key, block> for the new state, then diff against the
       // previous biome state. Only changed/added/removed cells touch the
@@ -306,10 +314,18 @@ export default function Viewer({ session }: Props) {
 
       const world = sceneRef.current?.world;
 
-      // Apply removed and changed inline — usually small lists.
+      // Apply removed and changed inline — usually small lists. We mutate
+      // lastBiomeMap as we go so an aborted apply leaves the map consistent
+      // with what's actually painted in the world.
       if (world) {
-        for (const r of removed) world.removeBlock(r.x, r.y, r.z);
-        for (const c of changed) world.setBlock(c.x, c.y, c.z, c.block, true);
+        for (const r of removed) {
+          world.removeBlock(r.x, r.y, r.z);
+          lastBiomeMap.current.delete(`${r.x},${r.y},${r.z}`);
+        }
+        for (const c of changed) {
+          world.setBlock(c.x, c.y, c.z, c.block, true);
+          lastBiomeMap.current.set(`${c.x},${c.y},${c.z}`, c.block);
+        }
       }
 
       // Group `added` placements by 16×16 chunk and apply chunk by chunk
@@ -360,11 +376,14 @@ export default function Viewer({ session }: Props) {
 
       let appliedCount = 0;
       const totalToApply = added.length;
+      let aborted = false;
       for (const chunk of chunks) {
+        if (myToken !== generationToken.current) { aborted = true; break; }
         if (world) {
           for (const a of chunk.blocks) {
             if (persist) optimisticKeys.current.add(`${a.x},${a.y},${a.z}`);
             world.setBlock(a.x, a.y, a.z, a.block, true);
+            lastBiomeMap.current.set(`${a.x},${a.y},${a.z}`, a.block);
           }
           setCount(world.blockCount);
         }
@@ -389,8 +408,7 @@ export default function Viewer({ session }: Props) {
 
         await new Promise<void>((r) => requestAnimationFrame(() => r()));
       }
-
-      lastBiomeMap.current = newMap;
+      if (aborted) return;
 
       if (persist) {
         if (changed.length > 0) {
