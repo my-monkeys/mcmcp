@@ -50,12 +50,18 @@ export type TreeFeature = {
   template: string;
   minDistance: number;
   probability: number;
+  /** Optional whitelist of blocks the surface must contain for this tree
+   * to spawn (e.g. `['grass_block']`). If absent, any non-air surface is
+   * accepted. */
+  requiresSurface?: string[];
 };
 
 export type ClusterFeature = {
   kind: 'cluster';
   block: string;
   density: number;
+  /** Optional whitelist of surface blocks. Same semantics as TreeFeature. */
+  requiresSurface?: string[];
 };
 
 export type LayerFeature = {

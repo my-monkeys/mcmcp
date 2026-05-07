@@ -125,6 +125,7 @@ function featurePass(
   for (const f of cfg.features) {
     if (f.kind === 'tree') {
       const tpl = loadTreeTemplate(f.template);
+      const allow = f.requiresSurface ? new Set(f.requiresSurface) : null;
       const points = poissonDisk2D(w, d, f.minDistance, rng);
       for (const p of points) {
         if (!rng.bool(f.probability)) continue;
@@ -134,6 +135,10 @@ function featurePass(
         if (surfaceY === undefined) continue;
         if (seaLevel !== null && surfaceY < seaLevel) continue;
         if (surfaceY + tpl.height > region.y2) continue;
+        if (allow) {
+          const surfaceCell = cells.get(cellKey(x, surfaceY, z));
+          if (!surfaceCell || !allow.has(surfaceCell)) continue;
+        }
         const rotation = (rng.int(0, 3) as 0 | 1 | 2 | 3);
         for (const placement of placeTree(tpl, x, surfaceY, z, rotation)) {
           if (
@@ -145,6 +150,7 @@ function featurePass(
         }
       }
     } else if (f.kind === 'cluster') {
+      const allow = f.requiresSurface ? new Set(f.requiresSurface) : null;
       for (let x = region.x1; x <= region.x2; x++) {
         for (let z = region.z1; z <= region.z2; z++) {
           if (!rng.bool(f.density)) continue;
@@ -153,6 +159,10 @@ function featurePass(
           const aboveY = surfaceY + 1;
           if (aboveY > region.y2) continue;
           if (cells.has(cellKey(x, aboveY, z))) continue;
+          if (allow) {
+            const surfaceCell = cells.get(cellKey(x, surfaceY, z));
+            if (!surfaceCell || !allow.has(surfaceCell)) continue;
+          }
           cells.set(cellKey(x, aboveY, z), f.block);
         }
       }

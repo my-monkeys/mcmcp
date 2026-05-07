@@ -14,7 +14,7 @@ export const DesertConfig: BiomeConfig = {
   },
   seaLevel: null,
   features: [
-    { kind: 'cluster', block: 'cactus',     density: 0.005 },
-    { kind: 'cluster', block: 'dead_bush',  density: 0.01 },
+    { kind: 'cluster', block: 'cactus',     density: 0.005, requiresSurface: ['sand'] },
+    { kind: 'cluster', block: 'dead_bush',  density: 0.01,  requiresSurface: ['sand'] },
   ],
 };

@@ -21,6 +21,6 @@ export const MesaConfig: BiomeConfig = {
       { y: 52, block: 'brown_terracotta' },
       { y: 56, block: 'light_gray_terracotta' },
     ] },
-    { kind: 'cluster', block: 'dead_bush', density: 0.01 },
+    { kind: 'cluster', block: 'dead_bush', density: 0.01, requiresSurface: ['red_sand'] },
   ],
 };

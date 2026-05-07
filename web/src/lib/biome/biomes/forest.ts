@@ -15,9 +15,9 @@ export const ForestConfig: BiomeConfig = {
   seaLevel: 28,
   rivers: { threshold: 0.14, frequency: 0.015, bankWidth: 0.05 },
   features: [
-    { kind: 'tree',    template: 'oak',          minDistance: 4, probability: 0.7 },
-    { kind: 'tree',    template: 'birch',        minDistance: 5, probability: 0.4 },
-    { kind: 'cluster', block: 'short_grass',     density: 0.22 },
-    { kind: 'cluster', block: 'fern',            density: 0.05 },
+    { kind: 'tree',    template: 'oak',          minDistance: 4, probability: 0.7, requiresSurface: ['grass_block'] },
+    { kind: 'tree',    template: 'birch',        minDistance: 5, probability: 0.4, requiresSurface: ['grass_block'] },
+    { kind: 'cluster', block: 'short_grass',     density: 0.22, requiresSurface: ['grass_block'] },
+    { kind: 'cluster', block: 'fern',            density: 0.05, requiresSurface: ['grass_block'] },
   ],
 };

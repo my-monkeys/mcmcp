@@ -15,8 +15,8 @@ export const TaigaConfig: BiomeConfig = {
   seaLevel: 28,
   rivers: { threshold: 0.14, frequency: 0.018, bankWidth: 0.06 },
   features: [
-    { kind: 'tree',    template: 'spruce',       minDistance: 5, probability: 0.7 },
-    { kind: 'cluster', block: 'fern',            density: 0.12 },
-    { kind: 'cluster', block: 'large_fern',      density: 0.04 },
+    { kind: 'tree',    template: 'spruce',       minDistance: 5, probability: 0.7, requiresSurface: ['grass_block'] },
+    { kind: 'cluster', block: 'fern',            density: 0.12, requiresSurface: ['grass_block'] },
+    { kind: 'cluster', block: 'large_fern',      density: 0.04, requiresSurface: ['grass_block'] },
   ],
 };

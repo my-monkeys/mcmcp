@@ -17,9 +17,9 @@ export const PlainsConfig: BiomeConfig = {
   seaLevel: 26,
   rivers: { threshold: 0.14, frequency: 0.015, bankWidth: 0.06 },
   features: [
-    { kind: 'tree',    template: 'oak',          minDistance: 12, probability: 0.3 },
-    { kind: 'cluster', block: 'short_grass',     density: 0.18 },
-    { kind: 'cluster', block: 'dandelion',       density: 0.012 },
-    { kind: 'cluster', block: 'poppy',           density: 0.008 },
+    { kind: 'tree',    template: 'oak',          minDistance: 12, probability: 0.3, requiresSurface: ['grass_block'] },
+    { kind: 'cluster', block: 'short_grass',     density: 0.18,  requiresSurface: ['grass_block'] },
+    { kind: 'cluster', block: 'dandelion',       density: 0.012, requiresSurface: ['grass_block'] },
+    { kind: 'cluster', block: 'poppy',           density: 0.008, requiresSurface: ['grass_block'] },
   ],
 };
