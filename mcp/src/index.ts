@@ -20,6 +20,7 @@ import {
 } from './store.js';
 import { buildLitematic } from './litematic.js';
 import { buildBg2Template } from './bg2template.js';
+import { generateBiome, type BiomeName } from './biome/index.js';
 
 const SUPABASE_URL = process.env.MCMCP_SUPABASE_URL ?? 'https://klliwmgdyuatstjvzzbb.supabase.co';
 const SUPABASE_KEY =
@@ -639,6 +640,76 @@ server.registerTool(
       return error(e instanceof Error ? e.message : String(e));
     }
   }
+);
+
+server.registerTool(
+  'generate_biome',
+  {
+    title: 'Generate a Minecraft biome into the session zone',
+    description:
+      'Procedurally fill the current session with terrain and decorations matching a chosen biome ' +
+      '(plains, forest, desert, taiga, mesa). Operates on the full zone, or on `region` if provided. ' +
+      'Refuses if the zone already contains blocks unless force=true.',
+    inputSchema: {
+      biome: z.enum(['plains', 'forest', 'desert', 'taiga', 'mesa']),
+      seed: z.number().int().optional(),
+      force: z.boolean().default(false).describe('Required if zone has existing blocks.'),
+      region: z.object({
+        x1: z.number().int().nonnegative(),
+        y1: z.number().int().nonnegative(),
+        z1: z.number().int().nonnegative(),
+        x2: z.number().int().nonnegative(),
+        y2: z.number().int().nonnegative(),
+        z2: z.number().int().nonnegative(),
+      }).optional().describe('Sub-region of the zone. Defaults to the full zone.'),
+      rivers: z.boolean().default(false).describe('Carve serpentine river channels (plains/forest/taiga only).'),
+      session_id: z.string().length(6).optional(),
+    },
+  },
+  async ({ biome, seed, force, region, rivers, session_id }) => {
+    try {
+      const id = resolveSession(session_id);
+      const session = await store.getSession(id);
+      if (region) {
+        const inBounds =
+          region.x2 < session.size_x &&
+          region.y2 < session.size_y &&
+          region.z2 < session.size_z &&
+          region.x1 <= region.x2 &&
+          region.y1 <= region.y2 &&
+          region.z1 <= region.z2;
+        if (!inBounds) {
+          return error(
+            `Region out of bounds for session ${id} (size ${session.size_x}×${session.size_y}×${session.size_z}).`,
+          );
+        }
+      }
+      const existing = await store.getAll(id);
+      if (existing.length > 0 && !force) {
+        return error(
+          `Zone has ${existing.length} existing blocks. Pass force: true to overwrite.`,
+        );
+      }
+      const resolvedSeed = seed ?? Date.now();
+      const placements = generateBiome({
+        biome: biome as BiomeName,
+        size: { x: session.size_x, y: session.size_y, z: session.size_z },
+        seed: resolvedSeed,
+        region,
+        rivers,
+      });
+      const written = await store.setBlocks(
+        id,
+        placements.map((p) => ({ x: p.x, y: p.y, z: p.z, block: p.block })),
+      );
+      return text(
+        `Generated biome ${biome} (seed ${resolvedSeed}). ` +
+          `Wrote ${written.written} blocks.`,
+      );
+    } catch (e) {
+      return error(e instanceof Error ? e.message : String(e));
+    }
+  },
 );
 
 async function main() {

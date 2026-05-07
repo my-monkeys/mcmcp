@@ -7,6 +7,8 @@ import { createScene, type SceneHandles } from '@/lib/scene';
 import { copyText } from '@/lib/clipboard';
 import MaterialsPanel, { type Material } from './MaterialsPanel';
 import SelectionPanel, { type Selection } from './SelectionPanel';
+import { BiomePanel } from './BiomePanel';
+import { generateBiome, type BiomeName, type RiversConfig } from '@/lib/biome';
 
 type Props = { session: Session };
 
@@ -21,6 +23,7 @@ export default function Viewer({ session }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneRef = useRef<SceneHandles | null>(null);
+  const biomeStatusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [count, setCount] = useState(0);
   const [status, setStatus] = useState<'connecting' | 'live' | 'offline'>('connecting');
   const [copied, setCopied] = useState(false);
@@ -31,6 +34,24 @@ export default function Viewer({ session }: Props) {
   const [version, setVersion] = useState<McVersion>(() => asMcVersion(session.mc_version));
   const [exporting, setExporting] = useState(false);
   const [bg2State, setBg2State] = useState<'idle' | 'copying' | 'copied' | 'error'>('idle');
+  const [biomeBusy, setBiomeBusy] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
+
+  // Cells we've just applied optimistically. The realtime sub will receive an
+  // echo for each one shortly after — we skip those so we don't re-animate.
+  const optimisticKeys = useRef<Set<string>>(new Set());
+
+  // Last set of placements we wrote to the local Three.js world. Lets the
+  // tweak handler (slider drag) compute a diff and only animate the cells
+  // that actually changed since the last regen.
+  const lastBiomeMap = useRef<Map<string, string>>(new Map());
+
+  // Monotonic token. Every applyBiome call captures its own token; after each
+  // await it checks the token is still the latest. Lets a new slider tweak
+  // cleanly abort an in-flight one without leaving artefacts.
+  const generationToken = useRef(0);
+  const [biomeStatus, setBiomeStatus] = useState<string | null>(null);
   const [diagLogs, setDiagLogs] = useState<string[]>([]);
   const [selectionEnabled, setSelectionEnabled] = useState(false);
   const [selection, setSelection] = useState<Selection>({
@@ -115,7 +136,13 @@ export default function Viewer({ session }: Props) {
               handles.world.removeBlock(old.x, old.y, old.z);
             } else {
               const row = payload.new as Block;
-              handles.world.setBlock(row.x, row.y, row.z, row.block_type, true);
+              const k = `${row.x},${row.y},${row.z}`;
+              if (optimisticKeys.current.has(k)) {
+                // Echo of an optimistic write we already applied locally.
+                optimisticKeys.current.delete(k);
+              } else {
+                handles.world.setBlock(row.x, row.y, row.z, row.block_type, true);
+              }
             }
             refreshCount();
           }
@@ -160,6 +187,12 @@ export default function Viewer({ session }: Props) {
     sceneRef.current?.setSelection(selectionEnabled ? selection : null);
   }, [selectionEnabled, selection]);
 
+  useEffect(() => {
+    return () => {
+      if (biomeStatusTimer.current) clearTimeout(biomeStatusTimer.current);
+    };
+  }, []);
+
   const onChangeVersion = async (v: McVersion) => {
     setVersion(v);
     const { error } = await supabase
@@ -201,6 +234,219 @@ export default function Viewer({ session }: Props) {
       setTimeout(() => setBg2State('idle'), 2000);
     }
   };
+
+  const handleReset = async () => {
+    setResetting(true);
+    try {
+      // Optimistic local clear — realtime DELETE events for a bulk delete
+      // don't reliably carry x/y/z (only the row's PK columns come through
+      // unless the table has REPLICA IDENTITY FULL set), so the realtime
+      // sub can't replay the wipe.
+      const world = sceneRef.current?.world;
+      if (world) {
+        world.clear();
+        setCount(0);
+        setMaterials([]);
+      }
+      lastBiomeMap.current = new Map();
+      const { error: e } = await supabase
+        .from('mcmcp_blocks')
+        .delete()
+        .eq('session_id', session.id);
+      if (e) throw e;
+    } catch (e) {
+      console.error('Reset failed:', e);
+    } finally {
+      setResetting(false);
+      setResetConfirmOpen(false);
+    }
+  };
+
+  const applyBiome = async (
+    persist: boolean,
+    biome: BiomeName,
+    seed: number,
+    rivers: boolean,
+    override: Partial<RiversConfig>,
+  ) => {
+    const myToken = ++generationToken.current;
+    if (persist) setBiomeBusy(true);
+    setBiomeStatus(persist ? 'Generating…' : 'Tweaking…');
+    try {
+      const region = selectionEnabled ? selection : undefined;
+      const placements = await generateBiome({
+        biome,
+        size: { x: session.size_x, y: session.size_y, z: session.size_z },
+        seed,
+        region,
+        rivers,
+        riverOverride: override,
+      });
+      // A newer call superseded us while we were generating — drop our work.
+      if (myToken !== generationToken.current) return;
+
+      // Build a Map<key, block> for the new state, then diff against the
+      // previous biome state. Only changed/added/removed cells touch the
+      // local world — unchanged cells stay put with no re-animation.
+      const newMap = new Map<string, string>();
+      for (const p of placements) newMap.set(`${p.x},${p.y},${p.z}`, p.block);
+      const prevMap = lastBiomeMap.current;
+
+      const removed: { x: number; y: number; z: number }[] = [];
+      const added: { x: number; y: number; z: number; block: string }[] = [];
+      const changed: { x: number; y: number; z: number; block: string }[] = [];
+
+      for (const [key] of prevMap) {
+        if (!newMap.has(key)) {
+          const [xs, ys, zs] = key.split(',');
+          removed.push({ x: Number(xs), y: Number(ys), z: Number(zs) });
+        }
+      }
+      for (const [key, newBlock] of newMap) {
+        const prevBlock = prevMap.get(key);
+        const [xs, ys, zs] = key.split(',');
+        if (prevBlock === undefined) {
+          added.push({ x: Number(xs), y: Number(ys), z: Number(zs), block: newBlock });
+        } else if (prevBlock !== newBlock) {
+          changed.push({ x: Number(xs), y: Number(ys), z: Number(zs), block: newBlock });
+        }
+      }
+
+      const world = sceneRef.current?.world;
+
+      // Apply removed and changed inline — usually small lists. We mutate
+      // lastBiomeMap as we go so an aborted apply leaves the map consistent
+      // with what's actually painted in the world.
+      if (world) {
+        for (const r of removed) {
+          world.removeBlock(r.x, r.y, r.z);
+          lastBiomeMap.current.delete(`${r.x},${r.y},${r.z}`);
+        }
+        for (const c of changed) {
+          world.setBlock(c.x, c.y, c.z, c.block, true);
+          lastBiomeMap.current.set(`${c.x},${c.y},${c.z}`, c.block);
+        }
+      }
+
+      // Group `added` placements by 16×16 chunk and apply chunk by chunk
+      // sorted from the region centre outwards. Produces the Minecraft-style
+      // wave on first generate; tweaks usually only touch a handful of
+      // chunks so the wave is barely perceptible.
+      const chunkMap = new Map<string, typeof added>();
+      for (const a of added) {
+        const cx = Math.floor(a.x / 16);
+        const cz = Math.floor(a.z / 16);
+        const k = `${cx},${cz}`;
+        let arr = chunkMap.get(k);
+        if (!arr) { arr = []; chunkMap.set(k, arr); }
+        arr.push(a);
+      }
+      const x1 = region?.x1 ?? 0;
+      const z1 = region?.z1 ?? 0;
+      const x2 = region?.x2 ?? session.size_x - 1;
+      const z2 = region?.z2 ?? session.size_z - 1;
+      const cx0 = (x1 + x2) / 2;
+      const cz0 = (z1 + z2) / 2;
+      const chunks = Array.from(chunkMap.entries())
+        .map(([k, blocks]) => {
+          const [cxStr, czStr] = k.split(',');
+          const cx = Number(cxStr);
+          const cz = Number(czStr);
+          const ccx = cx * 16 + 8;
+          const ccz = cz * 16 + 8;
+          const dx = ccx - cx0;
+          const dz = ccz - cz0;
+          return { blocks, dist: dx * dx + dz * dz };
+        })
+        .sort((a, b) => a.dist - b.dist);
+
+      // Persist strategy (only when persist=true): clear the session in
+      // Supabase, then bulk-upsert all new placements in parallel with the
+      // local apparition. Optimistic-key set filters echoes.
+      const persistPromises: PromiseLike<unknown>[] = [];
+      if (persist) {
+        persistPromises.push(
+          supabase
+            .from('mcmcp_blocks')
+            .delete()
+            .eq('session_id', session.id)
+            .then(({ error: e }) => { if (e) console.error('Persist reset error:', e); }),
+        );
+      }
+
+      let appliedCount = 0;
+      const totalToApply = added.length;
+      let aborted = false;
+      for (const chunk of chunks) {
+        if (myToken !== generationToken.current) { aborted = true; break; }
+        if (world) {
+          for (const a of chunk.blocks) {
+            if (persist) optimisticKeys.current.add(`${a.x},${a.y},${a.z}`);
+            world.setBlock(a.x, a.y, a.z, a.block, true);
+            lastBiomeMap.current.set(`${a.x},${a.y},${a.z}`, a.block);
+          }
+          setCount(world.blockCount);
+        }
+        appliedCount += chunk.blocks.length;
+        if (totalToApply > 0) {
+          setBiomeStatus(`${appliedCount.toLocaleString()} / ${totalToApply.toLocaleString()} blocks`);
+        }
+
+        if (persist) {
+          const rows = chunk.blocks.map((p) => ({
+            session_id: session.id,
+            x: p.x, y: p.y, z: p.z,
+            block_type: p.block,
+          }));
+          persistPromises.push(
+            supabase
+              .from('mcmcp_blocks')
+              .upsert(rows, { onConflict: 'session_id,x,y,z' })
+              .then(({ error: e }) => { if (e) console.error('Persist chunk error:', e); }),
+          );
+        }
+
+        await new Promise<void>((r) => requestAnimationFrame(() => r()));
+      }
+      if (aborted) return;
+
+      if (persist) {
+        if (changed.length > 0) {
+          const rows = changed.map((p) => ({
+            session_id: session.id,
+            x: p.x, y: p.y, z: p.z,
+            block_type: p.block,
+          }));
+          persistPromises.push(
+            supabase
+              .from('mcmcp_blocks')
+              .upsert(rows, { onConflict: 'session_id,x,y,z' })
+              .then(({ error: e }) => { if (e) console.error('Persist changed error:', e); }),
+          );
+        }
+        setBiomeStatus(`Saving ${placements.length.toLocaleString()} blocks…`);
+        await Promise.all(persistPromises);
+        setBiomeStatus(`Generated ${biome} (${placements.length.toLocaleString()} blocks)`);
+      } else {
+        const total = added.length + changed.length + removed.length;
+        setBiomeStatus(total > 0 ? `${total.toLocaleString()} cell${total > 1 ? 's' : ''} updated` : 'No change');
+      }
+      if (biomeStatusTimer.current) clearTimeout(biomeStatusTimer.current);
+      biomeStatusTimer.current = setTimeout(() => setBiomeStatus(null), persist ? 3000 : 1500);
+    } catch (e) {
+      setBiomeStatus(`Error: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      if (persist) setBiomeBusy(false);
+    }
+  };
+
+  const handleGenerateBiome = (
+    biome: BiomeName, seed: number, rivers: boolean, override: Partial<RiversConfig>,
+  ) => applyBiome(true, biome, seed, rivers, override);
+
+  const handleTweakBiome = (
+    biome: BiomeName, seed: number, rivers: boolean, override: Partial<RiversConfig>,
+  ) => applyBiome(false, biome, seed, rivers, override);
 
   return (
     <div className="relative h-dvh w-dvw bg-zinc-950 text-zinc-100 overflow-hidden">
@@ -314,6 +560,23 @@ export default function Viewer({ session }: Props) {
             : 'Copy BG2 template'}
         </button>
 
+        <BiomePanel
+          hasExistingBlocks={count > 0}
+          busy={biomeBusy}
+          status={biomeStatus}
+          onGenerate={handleGenerateBiome}
+          onTweak={handleTweakBiome}
+        />
+
+        <button
+          onClick={() => setResetConfirmOpen(true)}
+          disabled={count === 0 || resetting}
+          className="bg-zinc-900/80 backdrop-blur border border-red-900/50 hover:border-red-800 hover:bg-red-950/40 rounded-lg px-3 py-2 text-xs text-red-200 transition disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-zinc-900/80 disabled:hover:border-red-900/50"
+          title="Delete all blocks in this session (the session itself stays alive)"
+        >
+          {resetting ? 'Clearing…' : count === 0 ? 'Nothing to reset' : 'Reset session'}
+        </button>
+
         <div className="bg-zinc-900/80 backdrop-blur border border-zinc-800 rounded-lg px-4 py-3 text-xs space-y-3 min-w-56">
           <div className="flex items-center justify-between">
             <span className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">Y range</span>
@@ -356,6 +619,29 @@ export default function Viewer({ session }: Props) {
           </div>
         </div>
       </div>
+
+      {resetConfirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-lg p-6 max-w-md text-sm space-y-4">
+            <div className="font-semibold">Clear all blocks in this session?</div>
+            <p className="text-zinc-400">
+              This deletes {count.toLocaleString()} blocks. The session itself stays alive — you can keep generating into it.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setResetConfirmOpen(false)}
+                disabled={resetting}
+                className="px-3 py-1.5 rounded border border-zinc-700 hover:bg-zinc-800 text-xs disabled:opacity-40"
+              >Cancel</button>
+              <button
+                onClick={handleReset}
+                disabled={resetting}
+                className="px-3 py-1.5 rounded bg-red-600 hover:bg-red-500 text-white text-xs disabled:opacity-40"
+              >{resetting ? 'Clearing…' : 'Clear all blocks'}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
