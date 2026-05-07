@@ -13,7 +13,7 @@ export const ForestConfig: BiomeConfig = {
     terrainDepth: 6,
   },
   seaLevel: 28,
-  rivers: { threshold: 0.10, frequency: 0.03, bankWidth: 0.05 },
+  rivers: { threshold: 0.10, frequency: 0.015, bankWidth: 0.05 },
   features: [
     { kind: 'tree',    template: 'oak',          minDistance: 4, probability: 0.7 },
     { kind: 'tree',    template: 'birch',        minDistance: 5, probability: 0.4 },
