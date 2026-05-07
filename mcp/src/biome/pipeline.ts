@@ -92,19 +92,24 @@ function riverPass(
 ): void {
   const r = cfg.rivers;
   if (!r) return;
+  const bank = cfg.blocks.beach;
+  const bankOuter = bank && r.bankWidth ? r.threshold + r.bankWidth : null;
   for (let x = region.x1; x <= region.x2; x++) {
     for (let z = region.z1; z <= region.z2; z++) {
-      const v = riverNoise(x * r.frequency, z * r.frequency);
-      if (Math.abs(v) > r.threshold) continue;
+      const v = Math.abs(riverNoise(x * r.frequency, z * r.frequency));
       const surfaceY = heightmap.get(`${x},${z}`)!;
-      cells.set(cellKey(x, surfaceY, z), 'water');
-      const bedY = surfaceY - 1;
-      if (bedY >= region.y1) {
-        const k = cellKey(x, bedY, z);
-        const cur = cells.get(k);
-        if (cur === cfg.blocks.subsurface || cur === cfg.blocks.fill) {
-          cells.set(k, 'dirt');
+      if (v < r.threshold) {
+        cells.set(cellKey(x, surfaceY, z), 'water');
+        const bedY = surfaceY - 1;
+        if (bedY >= region.y1) {
+          const k = cellKey(x, bedY, z);
+          const cur = cells.get(k);
+          if (cur === cfg.blocks.subsurface || cur === cfg.blocks.fill) {
+            cells.set(k, 'dirt');
+          }
         }
+      } else if (bank && bankOuter !== null && v < bankOuter) {
+        cells.set(cellKey(x, surfaceY, z), bank);
       }
     }
   }
