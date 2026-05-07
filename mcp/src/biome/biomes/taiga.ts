@@ -13,7 +13,7 @@ export const TaigaConfig: BiomeConfig = {
     terrainDepth: 6,
   },
   seaLevel: 28,
-  rivers: { threshold: 0.10, frequency: 0.018, bankWidth: 0.06 },
+  rivers: { threshold: 0.14, frequency: 0.018, bankWidth: 0.06 },
   features: [
     { kind: 'tree',    template: 'spruce',       minDistance: 5, probability: 0.7 },
     { kind: 'cluster', block: 'fern',            density: 0.12 },
