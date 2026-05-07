@@ -228,6 +228,16 @@ export default function Viewer({ session }: Props) {
   const handleReset = async () => {
     setResetting(true);
     try {
+      // Optimistic local clear — realtime DELETE events for a bulk delete
+      // don't reliably carry x/y/z (only the row's PK columns come through
+      // unless the table has REPLICA IDENTITY FULL set), so the realtime
+      // sub can't replay the wipe.
+      const world = sceneRef.current?.world;
+      if (world) {
+        world.clear();
+        setCount(0);
+        setMaterials([]);
+      }
       const { error: e } = await supabase
         .from('mcmcp_blocks')
         .delete()
