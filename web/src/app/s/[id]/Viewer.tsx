@@ -262,6 +262,52 @@ export default function Viewer({ session }: Props) {
     }
   };
 
+  // Wipes the session's blocks in Supabase and bulk-inserts the given map.
+  // Used by both the Generate flow (with a freshly-generated map) and the
+  // explicit Save button (with the current lastBiomeMap). Marks every key as
+  // optimistic so the realtime sub doesn't re-animate the echo.
+  const persistBiomeMap = async (map: Map<string, string>): Promise<number> => {
+    const rows = Array.from(map.entries()).map(([k, block]) => {
+      const [xs, ys, zs] = k.split(',');
+      return {
+        session_id: session.id,
+        x: Number(xs), y: Number(ys), z: Number(zs),
+        block_type: block,
+      };
+    });
+    for (const k of map.keys()) optimisticKeys.current.add(k);
+
+    const { error: dErr } = await supabase
+      .from('mcmcp_blocks')
+      .delete()
+      .eq('session_id', session.id);
+    if (dErr) throw dErr;
+
+    for (let i = 0; i < rows.length; i += 1000) {
+      const slice = rows.slice(i, i + 1000);
+      const { error: uErr } = await supabase
+        .from('mcmcp_blocks')
+        .upsert(slice, { onConflict: 'session_id,x,y,z' });
+      if (uErr) throw uErr;
+    }
+    return rows.length;
+  };
+
+  const handleSave = async () => {
+    setBiomeBusy(true);
+    setBiomeStatus('Saving…');
+    try {
+      const written = await persistBiomeMap(lastBiomeMap.current);
+      setBiomeStatus(`Saved (${written.toLocaleString()} blocks)`);
+      if (biomeStatusTimer.current) clearTimeout(biomeStatusTimer.current);
+      biomeStatusTimer.current = setTimeout(() => setBiomeStatus(null), 3000);
+    } catch (e) {
+      setBiomeStatus(`Save error: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setBiomeBusy(false);
+    }
+  };
+
   const applyBiome = async (
     persist: boolean,
     biome: BiomeName,
@@ -360,18 +406,16 @@ export default function Viewer({ session }: Props) {
         })
         .sort((a, b) => a.dist - b.dist);
 
-      // Persist strategy (only when persist=true): clear the session in
-      // Supabase, then bulk-upsert all new placements in parallel with the
-      // local apparition. Optimistic-key set filters echoes.
-      const persistPromises: PromiseLike<unknown>[] = [];
+      // Kick off the full-state persist in parallel with the local apparition
+      // (Generate flow only). The persist always writes the COMPLETE newMap,
+      // regardless of how small the local diff is — clicking Generate after
+      // a slider tweak will correctly save the current visible state.
+      let persistPromise: Promise<number> | null = null;
       if (persist) {
-        persistPromises.push(
-          supabase
-            .from('mcmcp_blocks')
-            .delete()
-            .eq('session_id', session.id)
-            .then(({ error: e }) => { if (e) console.error('Persist reset error:', e); }),
-        );
+        persistPromise = persistBiomeMap(newMap).catch((e) => {
+          console.error('Persist failed:', e);
+          throw e;
+        });
       }
 
       let appliedCount = 0;
@@ -381,7 +425,6 @@ export default function Viewer({ session }: Props) {
         if (myToken !== generationToken.current) { aborted = true; break; }
         if (world) {
           for (const a of chunk.blocks) {
-            if (persist) optimisticKeys.current.add(`${a.x},${a.y},${a.z}`);
             world.setBlock(a.x, a.y, a.z, a.block, true);
             lastBiomeMap.current.set(`${a.x},${a.y},${a.z}`, a.block);
           }
@@ -392,41 +435,14 @@ export default function Viewer({ session }: Props) {
           setBiomeStatus(`${appliedCount.toLocaleString()} / ${totalToApply.toLocaleString()} blocks`);
         }
 
-        if (persist) {
-          const rows = chunk.blocks.map((p) => ({
-            session_id: session.id,
-            x: p.x, y: p.y, z: p.z,
-            block_type: p.block,
-          }));
-          persistPromises.push(
-            supabase
-              .from('mcmcp_blocks')
-              .upsert(rows, { onConflict: 'session_id,x,y,z' })
-              .then(({ error: e }) => { if (e) console.error('Persist chunk error:', e); }),
-          );
-        }
-
         await new Promise<void>((r) => requestAnimationFrame(() => r()));
       }
       if (aborted) return;
 
-      if (persist) {
-        if (changed.length > 0) {
-          const rows = changed.map((p) => ({
-            session_id: session.id,
-            x: p.x, y: p.y, z: p.z,
-            block_type: p.block,
-          }));
-          persistPromises.push(
-            supabase
-              .from('mcmcp_blocks')
-              .upsert(rows, { onConflict: 'session_id,x,y,z' })
-              .then(({ error: e }) => { if (e) console.error('Persist changed error:', e); }),
-          );
-        }
-        setBiomeStatus(`Saving ${placements.length.toLocaleString()} blocks…`);
-        await Promise.all(persistPromises);
-        setBiomeStatus(`Generated ${biome} (${placements.length.toLocaleString()} blocks)`);
+      if (persistPromise) {
+        setBiomeStatus(`Saving ${newMap.size.toLocaleString()} blocks…`);
+        const written = await persistPromise;
+        setBiomeStatus(`Generated ${biome} (${written.toLocaleString()} blocks)`);
       } else {
         const total = added.length + changed.length + removed.length;
         setBiomeStatus(total > 0 ? `${total.toLocaleString()} cell${total > 1 ? 's' : ''} updated` : 'No change');
@@ -566,6 +582,8 @@ export default function Viewer({ session }: Props) {
           status={biomeStatus}
           onGenerate={handleGenerateBiome}
           onTweak={handleTweakBiome}
+          onSave={handleSave}
+          canSave={count > 0}
         />
 
         <button

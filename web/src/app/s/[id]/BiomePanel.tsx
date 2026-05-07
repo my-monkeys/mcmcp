@@ -26,8 +26,10 @@ type Props = {
   hasExistingBlocks: boolean;
   busy: boolean;
   status: string | null;
+  canSave: boolean;
   onGenerate: (biome: BiomeName, seed: number, rivers: boolean, override: Partial<RiversConfig>) => void;
   onTweak: (biome: BiomeName, seed: number, rivers: boolean, override: Partial<RiversConfig>) => void;
+  onSave: () => void;
 };
 
 function defaultsFor(biome: BiomeName): { threshold: number; frequency: number } {
@@ -38,7 +40,7 @@ function defaultsFor(biome: BiomeName): { threshold: number; frequency: number }
   };
 }
 
-export function BiomePanel({ hasExistingBlocks, busy, status, onGenerate, onTweak }: Props) {
+export function BiomePanel({ hasExistingBlocks, busy, status, canSave, onGenerate, onTweak, onSave }: Props) {
   const [biome, setBiome] = useState<BiomeName>('plains');
   const [seed, setSeed] = useState<number>(() => Math.floor(Math.random() * 0x7fffffff));
   const [rivers, setRivers] = useState(false);
@@ -174,6 +176,15 @@ export function BiomePanel({ hasExistingBlocks, busy, status, onGenerate, onTwea
         className="w-full bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded px-3 py-1.5 text-xs disabled:opacity-40 disabled:cursor-not-allowed"
       >
         {busy ? 'Generating…' : 'Generate biome →'}
+      </button>
+
+      <button
+        onClick={onSave}
+        disabled={busy || !canSave}
+        className="w-full bg-emerald-700/80 hover:bg-emerald-600 border border-emerald-700 rounded px-3 py-1.5 text-xs text-white disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-emerald-700/80"
+        title="Save the currently visible state to the session (overwrites Supabase)"
+      >
+        Save current state
       </button>
 
       {status && <div className="text-[10px] text-zinc-500 text-center">{status}</div>}
