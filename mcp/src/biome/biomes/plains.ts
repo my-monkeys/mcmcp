@@ -12,7 +12,9 @@ export const PlainsConfig: BiomeConfig = {
     beach: 'sand',
     terrainDepth: 6,
   },
-  seaLevel: 31,
+  // sea level well below the heightmap baseline (32) so water only fills
+  // the rare deep dips — produces the occasional pond, not blanket flooding.
+  seaLevel: 26,
   features: [
     { kind: 'tree',    template: 'oak',          minDistance: 12, probability: 0.3 },
     { kind: 'cluster', block: 'short_grass',     density: 0.18 },

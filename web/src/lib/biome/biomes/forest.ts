@@ -12,7 +12,7 @@ export const ForestConfig: BiomeConfig = {
     beach: 'sand',
     terrainDepth: 6,
   },
-  seaLevel: 31,
+  seaLevel: 28,
   features: [
     { kind: 'tree',    template: 'oak',          minDistance: 4, probability: 0.7 },
     { kind: 'tree',    template: 'birch',        minDistance: 5, probability: 0.4 },

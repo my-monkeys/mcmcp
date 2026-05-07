@@ -12,7 +12,7 @@ export const TaigaConfig: BiomeConfig = {
     beach: 'gravel',
     terrainDepth: 6,
   },
-  seaLevel: 31,
+  seaLevel: 28,
   features: [
     { kind: 'tree',    template: 'spruce',       minDistance: 5, probability: 0.7 },
     { kind: 'cluster', block: 'fern',            density: 0.12 },
