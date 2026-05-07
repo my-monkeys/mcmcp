@@ -37,6 +37,10 @@ export default function Viewer({ session }: Props) {
   const [biomeBusy, setBiomeBusy] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
+
+  // Cells we've just applied optimistically. The realtime sub will receive an
+  // echo for each one shortly after — we skip those so we don't re-animate.
+  const optimisticKeys = useRef<Set<string>>(new Set());
   const [biomeStatus, setBiomeStatus] = useState<string | null>(null);
   const [diagLogs, setDiagLogs] = useState<string[]>([]);
   const [selectionEnabled, setSelectionEnabled] = useState(false);
@@ -122,7 +126,13 @@ export default function Viewer({ session }: Props) {
               handles.world.removeBlock(old.x, old.y, old.z);
             } else {
               const row = payload.new as Block;
-              handles.world.setBlock(row.x, row.y, row.z, row.block_type, true);
+              const k = `${row.x},${row.y},${row.z}`;
+              if (optimisticKeys.current.has(k)) {
+                // Echo of an optimistic write we already applied locally.
+                optimisticKeys.current.delete(k);
+              } else {
+                handles.world.setBlock(row.x, row.y, row.z, row.block_type, true);
+              }
             }
             refreshCount();
           }
@@ -243,23 +253,79 @@ export default function Viewer({ session }: Props) {
         region,
         rivers,
       });
-      setBiomeStatus(`Writing ${placements.length} blocks…`);
 
-      const BATCH = 1000;
-      for (let i = 0; i < placements.length; i += BATCH) {
-        const slice = placements.slice(i, i + BATCH);
-        const rows = slice.map((p) => ({
+      // Group placements by 16×16 (xz) chunk and sort chunks by distance from
+      // the region's centre. Produces a Minecraft-style "chunks light up from
+      // the middle outwards" apparition.
+      const chunkMap = new Map<string, typeof placements>();
+      for (const p of placements) {
+        const cx = Math.floor(p.x / 16);
+        const cz = Math.floor(p.z / 16);
+        const k = `${cx},${cz}`;
+        let arr = chunkMap.get(k);
+        if (!arr) { arr = []; chunkMap.set(k, arr); }
+        arr.push(p);
+      }
+      const x1 = region?.x1 ?? 0;
+      const z1 = region?.z1 ?? 0;
+      const x2 = region?.x2 ?? session.size_x - 1;
+      const z2 = region?.z2 ?? session.size_z - 1;
+      const cx0 = (x1 + x2) / 2;
+      const cz0 = (z1 + z2) / 2;
+      const chunks = Array.from(chunkMap.entries())
+        .map(([k, blocks]) => {
+          const [cxStr, czStr] = k.split(',');
+          const cx = Number(cxStr);
+          const cz = Number(czStr);
+          const ccx = cx * 16 + 8;
+          const ccz = cz * 16 + 8;
+          const dx = ccx - cx0;
+          const dz = ccz - cz0;
+          return { blocks, dist: dx * dx + dz * dz };
+        })
+        .sort((a, b) => a.dist - b.dist);
+
+      // Optimistic UI: apply each chunk to the local Three.js world (with
+      // spawn animation), persist to Supabase in parallel without awaiting
+      // the network round trip. The realtime sub filters out the echoes so
+      // we don't re-animate.
+      const persistPromises: PromiseLike<unknown>[] = [];
+      let appliedCount = 0;
+      for (const chunk of chunks) {
+        const world = sceneRef.current?.world;
+        if (world) {
+          for (const p of chunk.blocks) {
+            optimisticKeys.current.add(`${p.x},${p.y},${p.z}`);
+            world.setBlock(p.x, p.y, p.z, p.block, true);
+          }
+          setCount(world.blockCount);
+        }
+        appliedCount += chunk.blocks.length;
+        setBiomeStatus(`${appliedCount.toLocaleString()} / ${placements.length.toLocaleString()} blocks`);
+
+        const rows = chunk.blocks.map((p) => ({
           session_id: session.id,
           x: p.x, y: p.y, z: p.z,
           block_type: p.block,
         }));
-        const { error: e } = await supabase
-          .from('mcmcp_blocks')
-          .upsert(rows, { onConflict: 'session_id,x,y,z' });
-        if (e) throw e;
-        setBiomeStatus(`Writing ${Math.min(i + BATCH, placements.length)} / ${placements.length}…`);
+        persistPromises.push(
+          supabase
+            .from('mcmcp_blocks')
+            .upsert(rows, { onConflict: 'session_id,x,y,z' })
+            .then(({ error: e }) => {
+              if (e) console.error('Persist chunk error:', e);
+            }),
+        );
+
+        // Yield one frame so the renderer paints the new blocks before we
+        // start the next chunk — this is what produces the visible wave.
+        await new Promise<void>((r) => requestAnimationFrame(() => r()));
       }
-      setBiomeStatus(`Generated ${biome} (${placements.length} blocks)`);
+
+      setBiomeStatus(`Saving ${placements.length.toLocaleString()} blocks…`);
+      await Promise.all(persistPromises);
+
+      setBiomeStatus(`Generated ${biome} (${placements.length.toLocaleString()} blocks)`);
       if (biomeStatusTimer.current) clearTimeout(biomeStatusTimer.current);
       biomeStatusTimer.current = setTimeout(() => setBiomeStatus(null), 3000);
     } catch (e) {
