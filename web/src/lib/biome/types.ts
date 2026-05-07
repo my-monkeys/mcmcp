@@ -19,6 +19,9 @@ export type GenerateOptions = {
   size: { x: number; y: number; z: number };
   seed?: number;
   region?: Region;
+  /** Opt-in. When true and the biome has a `rivers` config, the pipeline
+   * carves serpentine river channels using a separate noise stream. */
+  rivers?: boolean;
 };
 
 export type HeightmapConfig = {
@@ -62,11 +65,22 @@ export type LayerFeature = {
 
 export type FeatureConfig = TreeFeature | ClusterFeature | LayerFeature;
 
+export type RiversConfig = {
+  /** River noise threshold around 0. Lower = thinner channels. ~0.04 is a
+   * narrow stream; ~0.08 is a wide channel. */
+  threshold: number;
+  /** Noise frequency. Lower = larger meanders, wider apart. ~0.02-0.04 looks
+   * natural for our zone sizes. */
+  frequency: number;
+};
+
 export type BiomeConfig = {
   heightmap: HeightmapConfig;
   blocks: BlockRules;
   seaLevel: number | null;
   features: FeatureConfig[];
+  /** When set, the pipeline can carve rivers if `opts.rivers` is true. */
+  rivers?: RiversConfig;
 };
 
 export type TreeTemplate = {

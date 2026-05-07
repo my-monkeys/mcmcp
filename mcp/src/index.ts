@@ -662,10 +662,11 @@ server.registerTool(
         y2: z.number().int().nonnegative(),
         z2: z.number().int().nonnegative(),
       }).optional().describe('Sub-region of the zone. Defaults to the full zone.'),
+      rivers: z.boolean().default(false).describe('Carve serpentine river channels (plains/forest/taiga only).'),
       session_id: z.string().length(6).optional(),
     },
   },
-  async ({ biome, seed, force, region, session_id }) => {
+  async ({ biome, seed, force, region, rivers, session_id }) => {
     try {
       const id = resolveSession(session_id);
       const session = await store.getSession(id);
@@ -695,6 +696,7 @@ server.registerTool(
         size: { x: session.size_x, y: session.size_y, z: session.size_z },
         seed: resolvedSeed,
         region,
+        rivers,
       });
       const written = await store.setBlocks(
         id,

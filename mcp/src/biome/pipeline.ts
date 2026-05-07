@@ -83,6 +83,33 @@ function waterPass(
   }
 }
 
+function riverPass(
+  cfg: BiomeConfig,
+  cells: Map<Cell, string>,
+  heightmap: Map<string, number>,
+  region: Region,
+  riverNoise: Noise2D,
+): void {
+  const r = cfg.rivers;
+  if (!r) return;
+  for (let x = region.x1; x <= region.x2; x++) {
+    for (let z = region.z1; z <= region.z2; z++) {
+      const v = riverNoise(x * r.frequency, z * r.frequency);
+      if (Math.abs(v) > r.threshold) continue;
+      const surfaceY = heightmap.get(`${x},${z}`)!;
+      cells.set(cellKey(x, surfaceY, z), 'water');
+      const bedY = surfaceY - 1;
+      if (bedY >= region.y1) {
+        const k = cellKey(x, bedY, z);
+        const cur = cells.get(k);
+        if (cur === cfg.blocks.subsurface || cur === cfg.blocks.fill) {
+          cells.set(k, 'dirt');
+        }
+      }
+    }
+  }
+}
+
 function featurePass(
   cfg: BiomeConfig, cells: Map<Cell, string>, heightmap: Map<string, number>, region: Region, rng: Rng,
 ): void {
@@ -145,12 +172,14 @@ export function runPipeline(cfg: BiomeConfig, opts: GenerateOptions): Placement[
   const seed = opts.seed ?? Date.now();
   const rng = createRng(seed);
   const noise = createNoise2D(createRng(seed ^ 0x9e3779b1));
+  const riverNoise = createNoise2D(createRng(seed ^ 0xfeedface));
 
   const cells = new Map<Cell, string>();
   const heightmap = heightmapPass(cfg, noise, region);
   terrainFillPass(cfg, cells, heightmap, region);
   surfacePass(cfg, cells, heightmap, region);
   waterPass(cfg, cells, heightmap, region);
+  if (opts.rivers) riverPass(cfg, cells, heightmap, region, riverNoise);
   featurePass(cfg, cells, heightmap, region, rng);
 
   const out: Placement[] = [];

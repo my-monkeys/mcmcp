@@ -35,6 +35,8 @@ export default function Viewer({ session }: Props) {
   const [exporting, setExporting] = useState(false);
   const [bg2State, setBg2State] = useState<'idle' | 'copying' | 'copied' | 'error'>('idle');
   const [biomeBusy, setBiomeBusy] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
   const [biomeStatus, setBiomeStatus] = useState<string | null>(null);
   const [diagLogs, setDiagLogs] = useState<string[]>([]);
   const [selectionEnabled, setSelectionEnabled] = useState(false);
@@ -213,7 +215,23 @@ export default function Viewer({ session }: Props) {
     }
   };
 
-  const handleGenerateBiome = async (biome: BiomeName, seed: number) => {
+  const handleReset = async () => {
+    setResetting(true);
+    try {
+      const { error: e } = await supabase
+        .from('mcmcp_blocks')
+        .delete()
+        .eq('session_id', session.id);
+      if (e) throw e;
+    } catch (e) {
+      console.error('Reset failed:', e);
+    } finally {
+      setResetting(false);
+      setResetConfirmOpen(false);
+    }
+  };
+
+  const handleGenerateBiome = async (biome: BiomeName, seed: number, rivers: boolean) => {
     setBiomeBusy(true);
     setBiomeStatus('Generating…');
     try {
@@ -223,6 +241,7 @@ export default function Viewer({ session }: Props) {
         size: { x: session.size_x, y: session.size_y, z: session.size_z },
         seed,
         region,
+        rivers,
       });
       setBiomeStatus(`Writing ${placements.length} blocks…`);
 
@@ -369,6 +388,15 @@ export default function Viewer({ session }: Props) {
           onGenerate={handleGenerateBiome}
         />
 
+        <button
+          onClick={() => setResetConfirmOpen(true)}
+          disabled={count === 0 || resetting}
+          className="bg-zinc-900/80 backdrop-blur border border-red-900/50 hover:border-red-800 hover:bg-red-950/40 rounded-lg px-3 py-2 text-xs text-red-200 transition disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-zinc-900/80 disabled:hover:border-red-900/50"
+          title="Delete all blocks in this session (the session itself stays alive)"
+        >
+          {resetting ? 'Clearing…' : count === 0 ? 'Nothing to reset' : 'Reset session'}
+        </button>
+
         <div className="bg-zinc-900/80 backdrop-blur border border-zinc-800 rounded-lg px-4 py-3 text-xs space-y-3 min-w-56">
           <div className="flex items-center justify-between">
             <span className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">Y range</span>
@@ -411,6 +439,29 @@ export default function Viewer({ session }: Props) {
           </div>
         </div>
       </div>
+
+      {resetConfirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-lg p-6 max-w-md text-sm space-y-4">
+            <div className="font-semibold">Clear all blocks in this session?</div>
+            <p className="text-zinc-400">
+              This deletes {count.toLocaleString()} blocks. The session itself stays alive — you can keep generating into it.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setResetConfirmOpen(false)}
+                disabled={resetting}
+                className="px-3 py-1.5 rounded border border-zinc-700 hover:bg-zinc-800 text-xs disabled:opacity-40"
+              >Cancel</button>
+              <button
+                onClick={handleReset}
+                disabled={resetting}
+                className="px-3 py-1.5 rounded bg-red-600 hover:bg-red-500 text-white text-xs disabled:opacity-40"
+              >{resetting ? 'Clearing…' : 'Clear all blocks'}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

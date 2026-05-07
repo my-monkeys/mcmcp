@@ -16,25 +16,30 @@ type Props = {
   hasExistingBlocks: boolean;
   busy: boolean;
   status: string | null;
-  onGenerate: (biome: BiomeName, seed: number) => void;
+  onGenerate: (biome: BiomeName, seed: number, rivers: boolean) => void;
 };
+
+const BIOMES_WITH_RIVERS: ReadonlySet<BiomeName> = new Set(['plains', 'forest', 'taiga']);
 
 export function BiomePanel({ hasExistingBlocks, busy, status, onGenerate }: Props) {
   const [biome, setBiome] = useState<BiomeName>('plains');
   const [seed, setSeed] = useState<number>(() => Math.floor(Math.random() * 0x7fffffff));
+  const [rivers, setRivers] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+
+  const riversAvailable = BIOMES_WITH_RIVERS.has(biome);
 
   const trigger = () => {
     if (hasExistingBlocks) {
       setConfirmOpen(true);
       return;
     }
-    onGenerate(biome, seed);
+    onGenerate(biome, seed, rivers && riversAvailable);
   };
 
   const confirm = () => {
     setConfirmOpen(false);
-    onGenerate(biome, seed);
+    onGenerate(biome, seed, rivers && riversAvailable);
   };
 
   return (
@@ -67,6 +72,19 @@ export function BiomePanel({ hasExistingBlocks, busy, status, onGenerate }: Prop
             title="Random seed"
           >🎲</button>
         </div>
+      </label>
+
+      <label
+        className={`flex items-center gap-2 ${riversAvailable ? '' : 'opacity-40 cursor-not-allowed'}`}
+        title={riversAvailable ? 'Carve serpentine river channels' : 'Not available for this biome'}
+      >
+        <input
+          type="checkbox"
+          checked={rivers && riversAvailable}
+          disabled={!riversAvailable}
+          onChange={(e) => setRivers(e.target.checked)}
+        />
+        <span className="text-zinc-400">Rivers</span>
       </label>
 
       <button
