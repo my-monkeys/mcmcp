@@ -10,6 +10,7 @@ export const TaigaConfig: BiomeConfig = {
     fill: 'stone',
     deep: null,
     beach: 'gravel',
+    terrainDepth: 6,
   },
   seaLevel: 31,
   features: [

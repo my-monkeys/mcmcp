@@ -49,11 +49,12 @@ function terrainFillPass(
   heightmap: Map<string, number>,
   region: Region,
 ): void {
-  const { fill, subsurface, subsurfaceDepth, deep } = cfg.blocks;
+  const { fill, subsurface, subsurfaceDepth, deep, terrainDepth } = cfg.blocks;
   for (let x = region.x1; x <= region.x2; x++) {
     for (let z = region.z1; z <= region.z2; z++) {
       const surfaceY = heightmap.get(`${x},${z}`)!;
-      for (let y = region.y1; y < surfaceY; y++) {
+      const minY = Math.max(region.y1, surfaceY - terrainDepth);
+      for (let y = minY; y < surfaceY; y++) {
         const depthFromSurface = surfaceY - y;
         if (deep && y === region.y1) {
           cells.set(cellKey(x, y, z), deep);

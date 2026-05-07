@@ -35,6 +35,11 @@ export type BlockRules = {
   fill: string;
   deep: string | null;
   beach: string | null;
+  /** Total depth of fill below the surface. Limits how deep the stone column
+   * goes; cells below `surfaceY - terrainDepth` are left as air. Keeps the
+   * generated biome a thin slab on top of empty space rather than a giant
+   * stone cube. */
+  terrainDepth: number;
 };
 
 export type TreeFeature = {

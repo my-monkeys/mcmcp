@@ -10,6 +10,7 @@ export const DesertConfig: BiomeConfig = {
     fill: 'sandstone',
     deep: null,
     beach: null,
+    terrainDepth: 6,
   },
   seaLevel: null,
   features: [

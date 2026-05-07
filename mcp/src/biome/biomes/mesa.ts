@@ -10,6 +10,7 @@ export const MesaConfig: BiomeConfig = {
     fill: 'terracotta',
     deep: null,
     beach: null,
+    terrainDepth: 24,
   },
   seaLevel: null,
   features: [

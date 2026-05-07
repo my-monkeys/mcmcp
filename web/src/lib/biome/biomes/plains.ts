@@ -10,6 +10,7 @@ export const PlainsConfig: BiomeConfig = {
     fill: 'stone',
     deep: null,
     beach: 'sand',
+    terrainDepth: 6,
   },
   seaLevel: 31,
   features: [
